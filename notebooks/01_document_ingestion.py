@@ -7,11 +7,15 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install pypdf
+# MAGIC %pip install --quiet pypdf pymupdf
 
 # COMMAND ----------
 
 dbutils.library.restartPython()
+
+# COMMAND ----------
+
+import pymupdf as fitz
 
 # COMMAND ----------
 
@@ -124,7 +128,7 @@ display(dbutils.fs.ls(VOLUME_PATH))
 
 # ── Extraction + cleaning ────────────────────────────────────────────────
 import re
-from pypdf import PdfReader
+import fitz  # PyMuPDF — handles EUR-Lex kerning; pypdf inserted intra-word spaces
 
 NOISE_PATTERNS = [
     r"^\s*EN\s*$",              # EUR-Lex language marker
@@ -134,8 +138,8 @@ NOISE_PATTERNS = [
 ]
 
 def extract_pdf_text(path: str) -> str:
-    reader = PdfReader(path)
-    return "\n".join((page.extract_text() or "") for page in reader.pages)
+    with fitz.open(path) as doc:
+        return "\n".join(page.get_text() for page in doc)
 
 def clean_text(t: str) -> str:
     lines = [
@@ -145,6 +149,9 @@ def clean_text(t: str) -> str:
     out = "\n".join(lines)
     out = re.sub(r"-\n(?=[a-z])", "", out)   # re-join hyphenated line breaks
     out = re.sub(r"\n{3,}", "\n\n", out)
+    # normalize any residual kerning splits in the tokens our chunkers key on
+    out = re.sub(r"\bA\s?r\s?t\s?i\s?c\s?l\s?e\b", "Article", out)
+    out = re.sub(r"\bA\s?N\s?N\s?E\s?X\b", "ANNEX", out)
     return out
 
 # COMMAND ----------
@@ -194,23 +201,43 @@ def _split_paragraphs(block: str, header: str, base: dict) -> list:
         i += 1
     return chunks
 
+def _find_article_headings(text: str) -> list:
+    """Return [(char_offset, article_number), ...] for REAL headings only.
+    A heading line starts with 'Article N', is short, isn't a cross-reference
+    like 'Article 6(1)', and article numbers must increase monotonically."""
+    heads, last_n = [], 0
+    for m in re.finditer(r"(?m)^Article\s+(\d{1,3})\b(?!\s*\()", text):
+        n = int(m.group(1))
+        line_end = text.find("\n", m.start())
+        line = text[m.start(): line_end if line_end != -1 else len(text)]
+        if len(line) > 80:                     # headings are short; wrapped prose isn't
+            continue
+        if not (last_n < n <= last_n + 5):     # tolerate a missed heading, reject
+            continue                           # out-of-sequence cross-references
+        heads.append((m.start(), n))
+        last_n = n
+    return heads
+
 def chunk_eu_ai_act(text: str) -> list:
     chunks = []
-    start = re.search(r"\nArticle\s+1\s*\n", text)   # drop preamble + 180 recitals
-    if not start:
-        raise ValueError("Couldn't find 'Article 1' heading — inspect clean_text output.")
-    body = text[start.start():]
+    heads = _find_article_headings(text)
+    if not heads:
+        raise ValueError("No article headings found — run the diagnostic cell.")
 
-    parts = re.split(r"\n(?=ANNEX\s+[IVXLC]+)", body)  # peel off annexes
-    articles_text, annex_blocks = parts[0], parts[1:]
+    # peel off annexes: real annex headings are UPPERCASE at line start;
+    # in-text references ('Annex III') are title case, so they don't match
+    am = re.search(r"(?m)^ANNEX\s+[IVXLC]+\b", text[heads[0][0]:])
+    annex_start = heads[0][0] + am.start() if am else len(text)
+    annex_region = text[annex_start:]
 
-    # Split ONLY on standalone 'Article N' heading lines — inline
-    # cross-references ("...in Article 6(1)...") must not fragment chunks.
-    for block in re.split(r"\n(?=Article\s+\d{1,3}\s*\n)", articles_text):
-        m = re.match(r"Article\s+(\d{1,3})\s*\n\s*(.*)", block)
-        if not m:
-            continue
-        n, title = int(m.group(1)), (m.group(2) or "").strip()
+    # slice article blocks between consecutive validated headings
+    bounds = [h[0] for h in heads] + [annex_start]
+    for (pos, n), end in zip(heads, bounds[1:]):
+        block = text[pos:end].strip()
+        first_line, _, rest = block.partition("\n")
+        title = re.sub(r"^Article\s+\d{1,3}\s*[:.\-–]?\s*", "", first_line).strip()
+        if not title:                          # title was on the next line
+            title = rest.lstrip().split("\n", 1)[0].strip()
         tier, role = get_article_applicability(n)
         base = {
             "document_section": f"Article {n}",
@@ -222,9 +249,9 @@ def chunk_eu_ai_act(text: str) -> list:
         if len(block) / CHARS_PER_TOKEN > EU_MAX_TOKENS:
             chunks += _split_paragraphs(block, f"EU AI Act — Article {n} ({title})", base)
         else:
-            chunks.append({**base, "chunk_text": block.strip(), "chunk_index": 0})
+            chunks.append({**base, "chunk_text": block, "chunk_index": 0})
 
-    for block in annex_blocks:
+    for block in re.split(r"(?m)^(?=ANNEX\s+[IVXLC]+\b)", annex_region):
         m = re.match(r"ANNEX\s+([IVXLC]+)", block)
         if not m:
             continue
@@ -325,6 +352,21 @@ for source, fname in DOC_FILES.items():
 
 # COMMAND ----------
 
+text = clean_text(extract_pdf_text(f"{VOLUME_PATH}/eu_ai_act.pdf"))
+i = text.find("Article 1")
+print("first 'Article 1' at char:", i, "of", len(text))
+print(repr(text[max(0, i-300): i+300]))
+
+# COMMAND ----------
+
+import re
+hits = [m.group(0) for m in re.finditer(r"(?m)^.{0,60}Article\s+\d{1,3}.{0,20}", text)][:15]
+print("\n".join(hits) if hits else "no line-start Article hits")
+print("---")
+print("total 'Article' occurrences:", len(re.findall(r"Article\s+\d", text)))
+
+# COMMAND ----------
+
 # ── Write to Delta (truncate + reload; Delta versioning keeps history) ──
 from pyspark.sql.types import (StructType, StructField, StringType, IntegerType,
                                TimestampType, DateType)
@@ -405,3 +447,6 @@ FROM {CATALOG}.{SCHEMA}.regulatory_chunks
 WHERE subcategory_id IN ('GOVERN 1.1', 'MANAGE 1.1')
 ORDER BY source, subcategory_id
 """))
+
+# COMMAND ----------
+
