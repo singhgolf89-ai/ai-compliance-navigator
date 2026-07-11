@@ -1,0 +1,122 @@
+\# AI Compliance Navigator — Work Log
+
+
+
+\## Session 1 — Friday, July 11, 2026 | 2:00 PM – 3:30 PM ET (1.5 hrs)
+
+\*\*Phase 1 — Data Foundation: COMPLETE (gate passed)\*\*
+
+
+
+\### Completed
+
+\- Created local repo skeleton (`notebooks/`, `src/`, `tests/`, `data/`, `.streamlit/`) per target structure
+
+\- Added `.gitignore` with secrets exclusion; verified with `git check-ignore` (secrets-exclusion DoD item)
+
+\- Scrubbed PII from `architecture.md` header (removed employer/title; neutralized status line); set GitHub noreply email as commit identity
+
+\- Initialized git, first commit, pushed to private GitHub repo `ai-compliance-navigator`
+
+\- Downloaded corpus from official sources: EU AI Act (EUR-Lex, Reg. 2024/1689), NIST AI RMF 1.0 (AI 100-1), NIST AI RMF Playbook
+
+\- Stood up Databricks Free Edition workspace (serverless)
+
+\- Created Unity Catalog objects: `ai\_governance.compliance\_navigator` + `raw\_docs` volume
+
+\- Created Delta tables `raw\_documents` (Change Data Feed enabled) and `regulatory\_chunks`
+
+\- Uploaded 3 PDFs to volume; ran full ingestion notebook `01\_document\_ingestion.py`
+
+\- Verified spot-checks: Article 5 = prohibited, Article 9 = high\_risk/provider, Annex III = high\_risk, GOVERN 1.1 / MANAGE 1.1 clean in both NIST sources
+
+
+
+\### Chunk counts (recorded per DoD)
+
+| source | chunks | sections | approx\_tokens |
+
+|---|---|---|---|
+
+| eu\_ai\_act | 185 | 124 | 87,918 |
+
+| nist\_ai\_rmf | 85 | 72 | 12,037 |
+
+| nist\_playbook | 185 | 72 | 78,459 |
+
+
+
+Note: 72 NIST sections = exact RMF core subcategory count, independently
+
+reproduced by RMF and Playbook parses — cross-validates both.
+
+
+
+\### Issues hit \& resolutions (interview knowledge)
+
+1\. \*\*PowerShell vs bash syntax\*\* — original commands were bash; translated to
+
+&#x20;  PowerShell (`New-Item`, comma-separated `mkdir`).
+
+2\. \*\*git push 403\*\* — cached credential belonged to a different GitHub account
+
+&#x20;  than the repo owner. Lesson: HTTPS pushes authenticate via the cached token,
+
+&#x20;  not the remote URL.
+
+3\. \*\*GH007 email-privacy rejection\*\* — commit authored with real email while
+
+&#x20;  GitHub privacy protection enabled. Fixed with noreply address +
+
+&#x20;  `git commit --amend --reset-author`.
+
+4\. \*\*Serverless session setup error (XX000)\*\* — transient platform issue after
+
+&#x20;  `restartPython()`; resolved by detaching/reattaching compute.
+
+5\. \*\*pypdf kerning artifact (the big one)\*\* — EUR-Lex letter-spaced typography
+
+&#x20;  made pypdf insert intra-word spaces ("Ar ticle"), breaking all heading
+
+&#x20;  regexes. Swapped extraction to PyMuPDF; added keyword normalization in
+
+&#x20;  `clean\_text` as a guard. Lesson: PDF extraction fidelity is a first-class
+
+&#x20;  engineering decision — always eyeball extracted text before trusting parsers.
+
+6\. \*\*Chunker hardening\*\* — replaced naive `Article N` splitting with validated
+
+&#x20;  headings (short-line check + monotonic article-number sequence) so inline
+
+&#x20;  cross-references can't fragment chunks. Added annex chunking (not in
+
+&#x20;  original architecture doc) since Annex III retrieval is a Phase 2 gate.
+
+
+
+\### Open items / watch list
+
+\- Playbook chunks contain residual page furniture ("5 of 142") — add noise
+
+&#x20; pattern next time the notebook is touched
+
+\- Some Playbook chunks are pure reference lists — monitor retrieval quality in Phase 2
+
+\- VERIFY regulatory dates against EUR-Lex Art. 113 before any demo (arch doc's
+
+&#x20; limited-risk deadline of 2025-08-02 appears to conflate the GPAI date)
+
+\- PyMuPDF is AGPL — note in README dependencies
+
+
+
+\### Next session (Phase 2 — Vector Search + Classification)
+
+\- Pre-work (2 min): confirm in workspace UI that Vector Search create option
+
+&#x20; and a BGE/GTE embedding serving endpoint exist on Free Edition
+
+\- Create AI Search endpoint + Delta Sync index over `regulatory\_chunks`
+
+\- Build `src/classification\_engine.py`; test 4 seed systems across all 4 risk tiers
+
