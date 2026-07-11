@@ -4,7 +4,7 @@
 # MAGIC Creates governance objects, loads the regulatory corpus, chunks it
 # MAGIC (EU AI Act by article/annex, NIST by subcategory), lands it in Delta.
 # MAGIC Run top-to-bottom; pause at the UPLOAD CHECKPOINT.
-
+# git folder sync verified — session 2.
 # COMMAND ----------
 
 # MAGIC %pip install --quiet pypdf pymupdf
