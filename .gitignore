@@ -1,0 +1,16 @@
+# secrets — never commit
+.streamlit/secrets.toml
+*.env
+.env*
+.databrickscfg
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# local artifacts — regulatory PDFs stay out of the repo; README links official sources
+*.pdf
+data/raw/
+mlruns/
+.DS_Store
