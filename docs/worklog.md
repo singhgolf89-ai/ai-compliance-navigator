@@ -119,4 +119,56 @@ reproduced by RMF and Playbook parses — cross-validates both.
 \- Create AI Search endpoint + Delta Sync index over `regulatory\_chunks`
 
 \- Build `src/classification\_engine.py`; test 4 seed systems across all 4 risk tiers
+---
 
+## Session 2 — Friday, July 11, 2026 | Evening (~1.5 hrs)
+**Git hygiene + single source of truth: COMPLETE**
+
+### Completed
+- Diagnosed commit misattribution: commits were authored with a placeholder
+  noreply ID (12345678+...) which GitHub resolved to a stranger's account
+  (shubh2294). Confirmed via `git log` that all commits were mine — no foreign
+  access, no compromise.
+- Rewrote all commit authorship with real noreply address
+  (301088062+singhgolf89-ai@users.noreply.github.com) via
+  `git rebase -r --root --exec "git commit --amend --reset-author --no-edit"`;
+  force-pushed with `--force-with-lease`. Verified avatars on GitHub.
+- Relocated repo OneDrive → C:\Users\singh\code after OneDrive file locks
+  corrupted two rebase attempts (orphaned .git/rebase-merge state); recovered
+  via manual marker cleanup + `git reset --hard origin/main` + fresh clone
+  (un-nested the clone-into-same-name folder).
+- Fixed repo visibility: created public by mistake → now Private; verified
+  Collaborators = 0 ("only you can contribute").
+- Databricks Git integration: fine-grained PAT (single repo, Contents r/w,
+  ~90-day expiry) + Git provider email set to real noreply address.
+- Consolidated workspace to one git-backed Git folder; removed old
+  standalone/imported copies (resolved "repo already exists" collision).
+- Round-trip verified end-to-end: edit in Databricks Git folder → Commit &
+  push → visible on GitHub under my avatar → `git pull` locally (fast-forward,
+  d1988be..d4a014e).
+
+### Issues hit & resolutions (interview knowledge)
+1. **Commit attribution is metadata, not access control** — GitHub maps the
+   self-declared author email to an account; a stranger's avatar meant email
+   mix-up, not intrusion. Public/private governs reads; commits always require
+   write access. Enterprise answer for provable authorship: signed commits.
+2. **Never keep git repos in synced folders** — OneDrive held locks during
+   rebase's rewind/replay cycle and half-deleted .git/rebase-merge, producing
+   "rebasing but no rebase exists" limbo. GitHub is the backup; a sync agent
+   on .git is pure liability.
+3. **git clone creates its own directory** — cloning into an existing
+   same-named folder nests the repo one level deep.
+4. **Commit messages are not commands** — dialog text goes in dialogs;
+   PowerShell only gets git commands.
+
+### Open items (carried forward)
+- Playbook chunks: strip page furniture ("N of 142") next notebook touch
+- VERIFY regulatory dates vs EUR-Lex Art. 113 before any demo
+- PyMuPDF AGPL note for README dependencies section
+
+### Next session — Phase 2 kickoff (Vector Search + Classification)
+- Pre-work: entitlement check — Compute → Vector Search "Create" option?
+  Serving → BGE/GTE embedding endpoint listed? Report before dependent code.
+- Constraint: free tier = 1 vector search endpoint max; create nothing early.
+- Build: Delta Sync index over regulatory_chunks; src/classification_engine.py;
+  4 seed systems spanning all 4 risk tiers.
