@@ -172,3 +172,54 @@ reproduced by RMF and Playbook parses — cross-validates both.
 - Constraint: free tier = 1 vector search endpoint max; create nothing early.
 - Build: Delta Sync index over regulatory_chunks; src/classification_engine.py;
   4 seed systems spanning all 4 risk tiers.
+---
+
+## Session 3 — Sunday, July 12, 2026 | Phase 2: Vector Search + Classification — PASSED
+
+### Completed
+- Entitlement check: AI Search (create) available; databricks-bge-large-en +
+  databricks-gte-large-en embedding endpoints confirmed working (1024-dim).
+  Fully managed vector track — no fallback needed.
+- classification_engine.py: deterministic 4-tier EU AI Act classifier; passes
+  4 seed systems (prohibited/high-risk/limited/minimal). Fixed arch-doc bug
+  (None leaking into applicable_articles for non-deployers); added all_matches
+  audit field.
+- Delta Sync vector index over regulatory_chunks with managed BGE embeddings:
+  455 rows indexed, ONLINE_NO_PENDING_UPDATE.
+- Retrieval verified: EU-filtered query surfaces Art. 6/8/9/12 high_risk;
+  risk-tier filter respected (no forbidden tiers leak).
+
+### Issues hit & resolutions (interview knowledge)
+1. Enabled Change Data Feed on regulatory_chunks (required for Delta Sync;
+   only raw_documents had it at creation).
+2. SDK renamed databricks-vectorsearch → databricks-ai-search; wait_until_ready
+   signature changed (expects timedelta, not int) → replaced with manual
+   describe()-polling loop (more robust anyway).
+3. Corrupted index from interrupted build ("not ready" on both query AND sync)
+   → delete_index + recreate clean. Lesson: Delta Sync index has two phases
+   (create + sync); interrupted sync leaves "exists but not ready" state that
+   only drop/recreate fixes.
+4. Free Edition throttles pipeline provisioning: PROVISIONING_PIPELINE_RESOURCES
+   took ~15 min. Managed vector search is convenient but tier-gated; local FAISS
+   is the fallback story.
+5. Empty-file trap: src/ and tests/ were Length-0 placeholders; pasted code went
+   to chat not disk. python imports empty module silently → NameError, no output.
+   Always verify Length > 0 after populating a file.
+6. Mispaste: test code landed in notebooks/03_test_pipeline.py → git restore.
+
+### Open items (carried forward)
+- Retrieval ranking is query-phrasing sensitive — Phase 3 retrieval function
+  must build a rich query (description + classification context)
+- Migrate to databricks-ai-search package name before Phase 6
+- Playbook page-furniture noise ("N of 142") still present
+- VERIFY regulatory dates vs EUR-Lex Art. 113 before demo
+- Cost/quota: vector index is the resource to tear down between sessions if
+  Free Edition quota is hit
+
+### Next: Phase 3 — LLM Synthesis (~4h)
+- Pre-work: check AI Gateway page for Claude/LLM endpoint availability
+  (GenAI models moved there per Serving-page banner)
+- Build retrieval.py (the two-track filtered retrieval function),
+  llm_synthesis.py (grounded synthesis, citation-per-requirement, JSON output)
+- Gate: schema-valid JSON on 3 runs; every requirement cited; starved-retrieval
+  test produces "not addressed in retrieved sources" not invention
