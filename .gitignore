@@ -14,3 +14,6 @@ __pycache__/
 data/raw/
 mlruns/
 .DS_Store
+
+# Databricks may spawn .ipynb siblings of source-format notebooks — ignore them
+*.ipynb
