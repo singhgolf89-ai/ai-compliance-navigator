@@ -9,7 +9,9 @@
 # COMMAND ----------
 
 # MAGIC %pip install --quiet databricks-vectorsearch
+
 # COMMAND ----------
+
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -36,6 +38,10 @@ print("CDF enabled on regulatory_chunks.")
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 from databricks.vector_search.client import VectorSearchClient
 vsc = VectorSearchClient()
 
@@ -50,7 +56,8 @@ else:
     vsc.create_endpoint(name=ENDPOINT_NAME, endpoint_type="STANDARD")
 
 # Block until the endpoint is ONLINE before creating the index
-vsc.wait_for_endpoint(name=ENDPOINT_NAME, timeout=1800)
+from datetime import timedelta
+vsc.wait_for_endpoint(name=ENDPOINT_NAME, timeout=timedelta(minutes=30))
 print(f"Endpoint '{ENDPOINT_NAME}' is online.")
 
 # COMMAND ----------
@@ -117,3 +124,102 @@ tiers = {r[2] for r in frows}
 print(f"Tiers present: {tiers}  (must be subset of {{high_risk, all}})")
 assert tiers.issubset({"high_risk", "all"}), f"Filter leaked tiers: {tiers}"
 print("Filter respected ✓")
+
+# COMMAND ----------
+
+vsc.delete_index(endpoint_name=ENDPOINT_NAME, index_name=INDEX_NAME)
+print("Deleted broken index. Waiting a moment for cleanup...")
+import time; time.sleep(20)
+
+# COMMAND ----------
+
+import time
+
+# Recreate the Delta Sync index from scratch
+print(f"Creating index '{INDEX_NAME}'...")
+vsc.create_delta_sync_index(
+    endpoint_name=ENDPOINT_NAME,
+    index_name=INDEX_NAME,
+    source_table_name=SOURCE_TABLE,
+    pipeline_type="TRIGGERED",
+    primary_key=PRIMARY_KEY,
+    embedding_source_column=EMBEDDING_SOURCE_COLUMN,
+    embedding_model_endpoint_name=EMBEDDING_ENDPOINT,
+)
+print("Index created. It auto-syncs on creation — polling until ready...")
+
+idx = vsc.get_index(endpoint_name=ENDPOINT_NAME, index_name=INDEX_NAME)
+for attempt in range(80):  # up to ~40 min
+    status = idx.describe().get("status", {})
+    state = status.get("detailed_state", "UNKNOWN")
+    ready = status.get("ready", False)
+    print(f"  [{attempt}] state={state} ready={ready}")
+    if ready:
+        print("Index is ready ✓")
+        break
+    time.sleep(30)
+else:
+    print("Not ready after 40 min — paste the last state line.")
+
+# COMMAND ----------
+
+import time
+
+idx = vsc.get_index(endpoint_name=ENDPOINT_NAME, index_name=INDEX_NAME)
+for attempt in range(40):
+    status = idx.describe().get("status", {})
+    state = status.get("detailed_state", "UNKNOWN")
+    ready = status.get("ready", False)
+    print(f"  [{attempt}] state={state} ready={ready}")
+    if ready:
+        print("Index is ready ✓")
+        break
+    time.sleep(30)
+
+# COMMAND ----------
+
+import json
+print(json.dumps(idx.describe().get("status", {}), indent=2, default=str))
+
+# COMMAND ----------
+
+results = idx.similarity_search(
+    query_text="insurance creditworthiness scoring for loan and premium decisions",
+    columns=["chunk_id", "source", "document_section", "section_title", "risk_tier"],
+    num_results=10,
+)
+rows = results["result"]["data_array"]
+print(f"Returned {len(rows)} chunks:\n")
+for r in rows:
+    print(f"  [{r[1]}] {r[2]} | tier={r[4]} | {str(r[3])[:60]}")
+
+# COMMAND ----------
+
+# EU-only, no tier filter — are the high-risk provisions retrievable?
+eu_only = idx.similarity_search(
+    query_text="insurance creditworthiness credit scoring risk assessment high-risk system requirements",
+    columns=["document_section", "source", "risk_tier", "section_title"],
+    filters={"source": "eu_ai_act"},
+    num_results=10,
+)
+for r in eu_only["result"]["data_array"]:
+    print(f"  {r[0]} | tier={r[2]} | {str(r[3])[:55]}")
+
+# COMMAND ----------
+
+filtered = idx.similarity_search(
+    query_text="insurance creditworthiness scoring",
+    columns=["document_section", "source", "risk_tier"],
+    filters={"source": "eu_ai_act", "risk_tier": ["high_risk", "all"]},
+    num_results=10,
+)
+frows = filtered["result"]["data_array"]
+print(f"Filtered (eu_ai_act, high_risk|all): {len(frows)} chunks")
+tiers = {r[2] for r in frows}
+print(f"Tiers present: {tiers}")
+assert tiers.issubset({"high_risk", "all"}), f"Filter leaked tiers: {tiers}"
+print("Filter respected ✓")
+
+# COMMAND ----------
+
+
