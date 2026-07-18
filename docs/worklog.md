@@ -223,3 +223,49 @@ reproduced by RMF and Playbook parses — cross-validates both.
   llm_synthesis.py (grounded synthesis, citation-per-requirement, JSON output)
 - Gate: schema-valid JSON on 3 runs; every requirement cited; starved-retrieval
   test produces "not addressed in retrieved sources" not invention
+
+  ---
+
+## Session 4 — Phase 3: LLM Synthesis — PASSED
+
+### Completed
+- Endpoint discovery: Free Edition exposes NO pay-per-token Claude (404/403
+  "rate limit 0"/"pay-per-token disabled"). Pivoted to Databricks-hosted OSS —
+  llama-3-3-70b, llama-3-1-8b, llama-4-maverick, gpt-oss-120b all reachable.
+  Chose databricks-meta-llama-3-3-70b-instruct (best instruction-following,
+  clean chat format). One-line swap to Claude on an entitled workspace.
+- src/utils.py: central config (endpoints, catalog, LLM params).
+- src/retrieval.py: two-track filtered retrieval (EU tier-filtered, NIST
+  source-filtered) — validated in Phase 2 as necessary vs blind query.
+- src/llm_synthesis.py: grounded synthesis, citation-per-requirement, strict
+  JSON, "not addressed" behavior, _extract_json defensive parser for open-model
+  output.
+- notebooks/03_test_pipeline.py: end-to-end gate. ALL 3 GATES PASS:
+  - GATE 1: schema-valid JSON 3/3 runs
+  - GATE 2: 100% citation coverage
+  - GATE 3: starved retrieval → ZERO invented articles (the credibility proof)
+
+### Issues hit (interview knowledge)
+1. Two models, two roles: BGE (embed, cheap, high-volume) + Llama 3.3 70B
+   (synthesize, expensive, low-volume). Standard RAG separation of concerns;
+   index-time and query-time embeddings MUST use the same model.
+2. Free Edition LLM gating: managed Claude unavailable; OSS models are the
+   fallback. Honest README story, drop-in swap preserved.
+3. Open-model JSON needs a defensive parser (fence-strip + brace-clip) + low
+   temperature — got 3/3 valid as a result.
+4. Scratchpad discipline: ran a probe inside the tracked 03_test_pipeline.py,
+   which polluted the Git folder. Force-reset to remote to recover. Lesson:
+   throwaway probes go in a separate untracked notebook.
+
+### Open items
+- STEP 3 report quality eyeball (pending)
+- Dynamic REPO path (done) but earlier commit f06987c still has email in
+  history — clean before Phase 6 public flip
+- Migrate databricks-vectorsearch → databricks-ai-search package name
+- VERIFY regulatory dates vs EUR-Lex Art. 113 before demo
+
+### Next: Phase 4 — Streamlit Frontend (~3h)
+- Build app.py: intake form (all SystemIntake fields) → tabbed report
+  (EU obligations / NIST mapping / cross-framework checklist) → Markdown export
+- Disclaimer in sidebar + export; graceful error states
+- Local Python + Streamlit testing (Phase 4 needs local streamlit install)
