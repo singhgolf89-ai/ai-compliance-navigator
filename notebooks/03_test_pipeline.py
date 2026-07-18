@@ -14,10 +14,16 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # Make src/ importable. Git folder path — adjust if your workspace user differs.
-import sys
-REPO = "/Workspace/Users/USER@example.com/ai-compliance-navigator"
+# Make src/ importable — derive repo root from this notebook's own path
+# (no hardcoded user/email; works for anyone who clones the repo).
+import sys, os
+_nb_path = (dbutils.notebook.entry_point.getDbutils()
+            .notebook().getContext().notebookPath().get())
+# notebook is at <repo>/notebooks/03_test_pipeline.py → repo root is two levels up
+REPO = "/Workspace" + os.path.dirname(os.path.dirname(_nb_path))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
+print("Repo root on path:", REPO)
 
 from src.classification_engine import classify_risk_tier, SystemIntake
 from src.retrieval import retrieve_compliance_requirements
