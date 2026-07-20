@@ -24,6 +24,40 @@ DISCLAIMER = (
     "compliance determinations."
 )
 
+
+def _to_markdown(name, clf, report):
+    md = [f"# AI Compliance Report: {name}",
+          f"\n*Generated: {datetime.now():%Y-%m-%d %H:%M}*\n",
+          "> **Disclaimer:** " + DISCLAIMER + "\n", "---\n",
+          "## Risk Classification\n",
+          f"- **Tier:** {clf.risk_tier.value.replace('_',' ').title()}",
+          f"- **Basis:** {clf.primary_basis}",
+          f"- **Role:** {clf.applicable_role.value.title()}",
+          f"- **Deadline:** {clf.compliance_deadline}\n"]
+    rc = report.get("risk_classification", {})
+    if rc.get("plain_language"):
+        md.append(f"**In plain language:** {rc['plain_language']}\n")
+    md.append("---\n## EU AI Act Obligations\n")
+    for ob in report.get("eu_ai_act_obligations", []):
+        md += [f"### {ob.get('article','')}: {ob.get('requirement','')}",
+               f"{ob.get('summary','')}\n",
+               f"- Role: {str(ob.get('role','')).title()}",
+               f"- Citation: {ob.get('citation','')}\n"]
+    md.append("---\n## NIST AI RMF Mapping\n")
+    for m in report.get("nist_rmf_mapping", []):
+        md += [f"### {m.get('subcategory','')}", f"**Outcome:** {m.get('outcome','')}\n"]
+        for a in m.get("suggested_actions", []):
+            md.append(f"- {a}")
+        md.append(f"\n*Citation: {m.get('citation','')}*\n")
+    md.append("---\n## Cross-Framework Checklist\n")
+    md.append("| EU AI Act Requirement | NIST RMF Mapping | Implementation Action |")
+    md.append("|---|---|---|")
+    for r in report.get("cross_framework_checklist", []):
+        md.append(f"| {r.get('eu_requirement','')} | {r.get('nist_mapping','')} | {r.get('implementation_action','')} |")
+    md.append("\n---\n*Informational only; not legal advice.*")
+    return "\n".join(md)
+
+
 # ── Sidebar ──────────────────────────────────────────────────────────────
 with st.sidebar:
     st.warning(f"**Disclaimer**\n\n{DISCLAIMER}")
@@ -162,36 +196,3 @@ with tab_report:
                 mime="text/markdown")
             with st.expander("Preview"):
                 st.code(md, language="markdown")
-
-
-def _to_markdown(name, clf, report):
-    md = [f"# AI Compliance Report: {name}",
-          f"\n*Generated: {datetime.now():%Y-%m-%d %H:%M}*\n",
-          "> **Disclaimer:** " + DISCLAIMER + "\n", "---\n",
-          "## Risk Classification\n",
-          f"- **Tier:** {clf.risk_tier.value.replace('_',' ').title()}",
-          f"- **Basis:** {clf.primary_basis}",
-          f"- **Role:** {clf.applicable_role.value.title()}",
-          f"- **Deadline:** {clf.compliance_deadline}\n"]
-    rc = report.get("risk_classification", {})
-    if rc.get("plain_language"):
-        md.append(f"**In plain language:** {rc['plain_language']}\n")
-    md.append("---\n## EU AI Act Obligations\n")
-    for ob in report.get("eu_ai_act_obligations", []):
-        md += [f"### {ob.get('article','')}: {ob.get('requirement','')}",
-               f"{ob.get('summary','')}\n",
-               f"- Role: {str(ob.get('role','')).title()}",
-               f"- Citation: {ob.get('citation','')}\n"]
-    md.append("---\n## NIST AI RMF Mapping\n")
-    for m in report.get("nist_rmf_mapping", []):
-        md += [f"### {m.get('subcategory','')}", f"**Outcome:** {m.get('outcome','')}\n"]
-        for a in m.get("suggested_actions", []):
-            md.append(f"- {a}")
-        md.append(f"\n*Citation: {m.get('citation','')}*\n")
-    md.append("---\n## Cross-Framework Checklist\n")
-    md.append("| EU AI Act Requirement | NIST RMF Mapping | Implementation Action |")
-    md.append("|---|---|---|")
-    for r in report.get("cross_framework_checklist", []):
-        md.append(f"| {r.get('eu_requirement','')} | {r.get('nist_mapping','')} | {r.get('implementation_action','')} |")
-    md.append("\n---\n*Informational only; not legal advice.*")
-    return "\n".join(md)
