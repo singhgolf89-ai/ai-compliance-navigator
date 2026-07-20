@@ -6,8 +6,7 @@ into EU results and buries the on-point provisions. For EU, also filter by
 risk tier so only tier-relevant obligations surface.
 """
 
-from databricks.vector_search.client import VectorSearchClient
-from src.utils import VS_ENDPOINT, VS_INDEX
+from src.utils import VS_ENDPOINT, VS_INDEX, get_vector_search_client
 
 
 def _tier_filter(risk_tier: str) -> list:
@@ -29,7 +28,7 @@ def retrieve_compliance_requirements(
         risk_tier: engine output ('prohibited'|'high_risk'|'limited_risk'|'minimal_risk')
         num_results: chunks per source
     """
-    vsc = VectorSearchClient()
+    vsc = get_vector_search_client()
     index = vsc.get_index(endpoint_name=VS_ENDPOINT, index_name=VS_INDEX)
 
     # Rich query: system + tier + intent keywords. Phase 2 showed terse queries

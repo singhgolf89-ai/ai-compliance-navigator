@@ -28,6 +28,48 @@ LLM_TEMPERATURE = 0.1   # low for consistent, reproducible structured output
 
 
 def get_deploy_client():
-    """Databricks MLflow deployments client — the single call site."""
+    """
+    MLflow deployments client that works in BOTH environments:
+    - Inside a Databricks notebook: implicit auth (no config needed).
+    - Locally (Streamlit): reads host + token from st.secrets, sets the env
+      vars mlflow expects, then connects.
+    """
+    import os
     import mlflow.deployments
+
+    # If not already authenticated (i.e. running locally), pull from st.secrets.
+    if not os.environ.get("DATABRICKS_HOST"):
+        try:
+            import streamlit as st
+            os.environ["DATABRICKS_HOST"] = st.secrets["databricks"]["host"]
+            os.environ["DATABRICKS_TOKEN"] = st.secrets["databricks"]["token"]
+        except Exception:
+            # No streamlit / no secrets -> assume we're inside Databricks
+            pass
+
     return mlflow.deployments.get_deploy_client("databricks")
+
+
+def get_vector_search_client():
+    """
+    VectorSearchClient that works locally and in-notebook. Locally it needs
+    explicit host + token; in-notebook it authenticates implicitly.
+    """
+    import os
+    from databricks.vector_search.client import VectorSearchClient
+
+    host = os.environ.get("DATABRICKS_HOST")
+    token = os.environ.get("DATABRICKS_TOKEN")
+    if not host:
+        try:
+            import streamlit as st
+            host = st.secrets["databricks"]["host"]
+            token = st.secrets["databricks"]["token"]
+            os.environ["DATABRICKS_HOST"] = host
+            os.environ["DATABRICKS_TOKEN"] = token
+        except Exception:
+            pass
+
+    if host and token:
+        return VectorSearchClient(workspace_url=host, personal_access_token=token)
+    return VectorSearchClient()   # in-notebook: implicit auth
