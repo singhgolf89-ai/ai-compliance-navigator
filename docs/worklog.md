@@ -269,3 +269,43 @@ reproduced by RMF and Playbook parses — cross-validates both.
   (EU obligations / NIST mapping / cross-framework checklist) → Markdown export
 - Disclaimer in sidebar + export; graceful error states
 - Local Python + Streamlit testing (Phase 4 needs local streamlit install)
+
+---
+
+## Session 5 — Phase 4: Streamlit Frontend — PASSED
+
+### Completed
+- Local→Databricks auth: PAT (model-serving + vector-search scopes) in
+  .streamlit/secrets.toml (gitignored); get_deploy_client() and
+  get_vector_search_client() read secrets locally, implicit auth in-notebook.
+- app.py: full intake form (all SystemIntake fields) → classify → retrieve →
+  synthesize → tabbed report (EU obligations / NIST mapping / cross-framework
+  checklist) + Markdown export + disclaimer (sidebar & export).
+- Graceful errors: empty-form validation; backend-failure caught with friendly
+  message, no stack trace to user.
+- VERIFIED end-to-end: insurance scenario → high-risk / Annex III(5)(b) →
+  real Art. 6/9/12 citations + NIST mapping + checklist, exported to Markdown.
+
+### Issues hit (interview knowledge)
+1. Local app needs explicit Databricks auth (host+token) that the notebook got
+   implicitly — the core local-deployment problem.
+2. Malformed secrets.toml (section header split across lines, missing token) →
+   "No module named databricks" masked as backend error. TOML section headers
+   are single-line.
+3. databricks-vectorsearch + mlflow must be installed in the SAME local Python
+   as Streamlit — used `python -m pip` to guarantee it.
+4. Streamlit reruns top-to-bottom every interaction → helper functions must be
+   DEFINED before they're CALLED (_to_markdown moved above the tabs).
+
+### Open items
+- In-app tabbed view + empty-form error state (confirming)
+- Retrieval ranking still query-phrasing sensitive (NIST subcats correct but
+  not always most on-point) — Phase 5 note
+- Clean commit history (email in f06987c) before Phase 6 public flip
+- VERIFY regulatory dates vs EUR-Lex Art. 113
+
+### Next: Phase 5 — Testing + Polish (~3h)
+- 8-10 diverse scenarios (prohibited, several high-risk, limited chatbot,
+  minimal, ambiguous multi-category) run clean via the app
+- test_scenarios.json + expand test_classification.py, committed
+- Markdown export verified across scenarios; UI copy proofread
