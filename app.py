@@ -24,6 +24,17 @@ DISCLAIMER = (
     "compliance determinations."
 )
 
+import json
+
+def _load_sample_report():
+    """Load the pre-generated demo report (real pipeline output, captured offline)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sample_report.json")
+    with open(path) as f:
+        return json.load(f)
+
+# Demo mode: set DEMO_MODE = "true" in secrets to force sample output (e.g. public
+# deployment), OR the app falls back to the sample automatically if the backend fails.
+DEMO_MODE = str(st.secrets.get("DEMO_MODE", "false")).lower() == "true"
 
 def _to_markdown(name, clf, report):
     md = [f"# AI Compliance Report: {name}",
@@ -116,26 +127,39 @@ with tab_intake:
             # Step 1: deterministic classification (instant, no backend)
             clf = classify_risk_tier(intake)
 
-            # Steps 2-3 hit Databricks — import lazily so a form error doesn't
-            # require a live connection, and wrap for graceful failure.
-            try:
-                with st.spinner("Retrieving regulatory provisions and synthesizing report..."):
-                    from src.retrieval import retrieve_compliance_requirements
-                    from src.llm_synthesis import synthesize_compliance_report
-                    retrieved = retrieve_compliance_requirements(
-                        system_description=f"{description}. Purpose: {intended_purpose}",
-                        risk_tier=clf.risk_tier.value)
-                    report = synthesize_compliance_report(
-                        system_description=f"{system_name}: {description}",
-                        classification={"risk_tier": clf.risk_tier.value,
-                            "primary_basis": clf.primary_basis, "reasoning": clf.reasoning},
-                        retrieved=retrieved)
-                st.session_state.update(clf=clf, report=report, system_name=system_name)
-                st.success("Analysis complete — see the Compliance Report tab.")
-            except Exception as e:
-                st.error("Could not reach the analysis backend. Check your Databricks "
-                         "connection and endpoints, then try again.")
-                st.caption(f"Details: {str(e)[:300]}")
+           # Steps 2-3 hit Databricks. Demo-mode (or backend failure) serves a
+            # pre-generated real report so the public URL always works.
+            if DEMO_MODE:
+                sample = _load_sample_report()
+                st.session_state.update(clf=clf, report=sample["report"],
+                                        system_name=system_name, demo=True)
+                st.info("Demo mode: showing a pre-generated sample report. "
+                        "Run locally with Databricks credentials for live analysis.")
+                st.success("Sample report ready — see the Compliance Report tab.")
+            else:
+                try:
+                    with st.spinner("Retrieving regulatory provisions and synthesizing report..."):
+                        from src.retrieval import retrieve_compliance_requirements
+                        from src.llm_synthesis import synthesize_compliance_report
+                        retrieved = retrieve_compliance_requirements(
+                            system_description=f"{description}. Purpose: {intended_purpose}",
+                            risk_tier=clf.risk_tier.value)
+                        report = synthesize_compliance_report(
+                            system_description=f"{system_name}: {description}",
+                            classification={"risk_tier": clf.risk_tier.value,
+                                "primary_basis": clf.primary_basis, "reasoning": clf.reasoning},
+                            retrieved=retrieved)
+                    st.session_state.update(clf=clf, report=report,
+                                            system_name=system_name, demo=False)
+                    st.success("Analysis complete — see the Compliance Report tab.")
+                except Exception as e:
+                    # Backend unreachable -> fall back to the sample rather than erroring
+                    sample = _load_sample_report()
+                    st.session_state.update(clf=clf, report=sample["report"],
+                                            system_name=system_name, demo=True)
+                    st.warning("Live backend unavailable — showing a pre-generated sample "
+                               "report. (Run locally with Databricks credentials for live analysis.)")
+                    st.caption(f"Backend detail: {str(e)[:200]}")
 
 # ── Report ───────────────────────────────────────────────────────────────
 with tab_report:

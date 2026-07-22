@@ -1,0 +1,86 @@
+{
+  "system_name": "Claims Triage Model",
+  "classification": {
+    "risk_tier": "high_risk",
+    "primary_basis": "Annex III(5)(b)",
+    "applicable_role": "provider",
+    "compliance_deadline": "2 August 2026 (Art. 113; general application)",
+    "confidence": "high"
+  },
+  "report": {
+    "risk_classification": {
+      "tier": "high_risk",
+      "basis": "Annex III(5)(b)",
+      "plain_language": "The Claims Triage Model is classified as high-risk because it assesses creditworthiness and insurance risk, which can have significant impacts on individuals."
+    },
+    "eu_ai_act_obligations": [
+      {
+        "article": "Article 9",
+        "requirement": "Risk management system",
+        "summary": "High-risk AI systems shall be tested for the purpose of identifying the most appropriate and targeted risk management measures.",
+        "role": "provider",
+        "citation": "[EU AI Act Art. 9]"
+      },
+      {
+        "article": "Article 12",
+        "requirement": "Record-keeping",
+        "summary": "High-risk AI systems shall technically allow for the automatic recording of events (logs) over the lifetime of the system.",
+        "role": "provider",
+        "citation": "[EU AI Act Art. 12]"
+      },
+      {
+        "article": "Article 6",
+        "requirement": "Classification rules for high-risk AI systems",
+        "summary": "An AI system referred to in Annex III shall be considered to be high-risk where it poses a significant risk of harm to the health, safety or fundamental rights of natural persons.",
+        "role": "provider",
+        "citation": "[EU AI Act Art. 6]"
+      }
+    ],
+    "nist_rmf_mapping": [
+      {
+        "subcategory": "GOVERN 3.2",
+        "function": "GOVERN",
+        "outcome": "Policies and procedures are in place to define and differentiate roles and responsibilities for human-AI configurations and oversight of AI systems.",
+        "suggested_actions": [
+          "Establish policies and procedures that define and differentiate the various human roles and responsibilities when using, interacting with, or monitoring AI systems."
+        ],
+        "citation": "[NIST AI RMF GOVERN 3.2]"
+      },
+      {
+        "subcategory": "MANAGE 1.2",
+        "function": "MANAGE",
+        "outcome": "Treatment of documented AI risks is prioritized based on impact, likelihood, and available resources or methods.",
+        "suggested_actions": [
+          "Prioritize risk treatment based on impact, likelihood, and available resources or methods."
+        ],
+        "citation": "[NIST AI RMF MANAGE 1.2]"
+      },
+      {
+        "subcategory": "MEASURE 3.2",
+        "function": "MEASURE",
+        "outcome": "Risk tracking approaches are considered for settings where AI risks are difficult to assess using currently available measurement techniques or where metrics are not yet available.",
+        "suggested_actions": [
+          "Establish processes for tracking emergent risks that may not be measurable with current approaches."
+        ],
+        "citation": "[NIST AI RMF MEASURE 3.2]"
+      }
+    ],
+    "cross_framework_checklist": [
+      {
+        "eu_requirement": "Risk management system [Art. 9]",
+        "nist_mapping": "MANAGE 1.2, MEASURE 3.2",
+        "implementation_action": "Develop and implement a risk management system that prioritizes risk treatment based on impact, likelihood, and available resources or methods, and considers risk tracking approaches for settings where AI risks are difficult to assess."
+      },
+      {
+        "eu_requirement": "Record-keeping [Art. 12]",
+        "nist_mapping": "GOVERN 3.2",
+        "implementation_action": "Establish policies and procedures for record-keeping and ensure that high-risk AI systems technically allow for the automatic recording of events (logs) over the lifetime of the system."
+      },
+      {
+        "eu_requirement": "Classification rules for high-risk AI systems [Art. 6]",
+        "nist_mapping": "MAP 5.1",
+        "implementation_action": "Not addressed in retrieved sources \u2014 manual review recommended."
+      }
+    ]
+  }
+}
