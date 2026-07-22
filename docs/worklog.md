@@ -309,3 +309,42 @@ reproduced by RMF and Playbook parses — cross-validates both.
   minimal, ambiguous multi-category) run clean via the app
 - test_scenarios.json + expand test_classification.py, committed
 - Markdown export verified across scenarios; UI copy proofread
+
+---
+
+## Session 6 — Phase 5: Testing + Polish — PASSED
+
+### Completed
+- tests/test_scenarios.json: 10 scenarios (S1-S10) — all 4 tiers + edge cases.
+- Expanded test_classification.py: 4 unit tests + 10-scenario runner.
+  RESULT: 4/4 unit PASS, S1-S9 exact tier+basis PASS, S10 documented.
+- Key edge cases verified:
+  - S5 ordering: emotion recognition in HR -> PROHIBITED Art. 5(1)(f)
+    (prohibited checked before high-risk — correct precedence).
+  - S9 multi-match: biometric+insurance -> Annex III(1)(b) (first-match-wins).
+  - S8 minimal: spam filter falls through to minimal_risk (default path).
+- S10 GPAI documented limitation: classifies as limited_risk/Art.50(2) (catches
+  transparency, not the Art.51-56 GPAI regime). Honest v2-roadmap item.
+- Live app pipeline verified across tiers: S2 (high-risk non-insurance),
+  S4 (prohibited), S6 (limited chatbot), S8 (minimal) all render correctly.
+- UI copy proofread.
+
+### v2 backlog (noted this session)
+- Assessment audit log: persist every intake + classification to a versioned
+  Delta table (ai_governance.compliance_navigator.assessment_log). Strong
+  audit-trail story; deliberately out of MVP scope. MVP is stateless
+  (st.session_state only).
+
+### Open items
+- Clean commit history (email in f06987c) before Phase 6 public flip
+- VERIFY regulatory dates vs EUR-Lex Art. 113 before demo
+- Migrate databricks-vectorsearch -> databricks-ai-search package name
+- Retrieval ranking query-phrasing sensitive (NIST subcats correct, not always
+  most on-point)
+
+### Next: Phase 6 — Deploy + Document (~3h)
+- Deploy app (Streamlit Community Cloud) with shareable URL
+- README: architecture diagram, honest fallback notes (OSS LLM, FAISS-swap),
+  run instructions, v2 roadmap
+- Repo public (after history clean), secrets excluded
+- Rehearse 5-min demo; LinkedIn case-study draft
