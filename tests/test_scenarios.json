@@ -1,0 +1,114 @@
+[
+  {
+    "id": "S1", "name": "Insurance claims triage",
+    "intake": {
+      "system_name": "Claims Triage Model", "domain": "insurance",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Automated triage of insurance claims, scoring claims for eligibility and fraud risk assessment",
+      "intended_purpose": "Accelerate insurance claims processing decisions"
+    },
+    "expected_tier": "high_risk", "expected_basis": "Annex III(5)(b)"
+  },
+  {
+    "id": "S2", "name": "HR resume screening",
+    "intake": {
+      "system_name": "TalentFilter", "domain": "HR",
+      "ai_type": "classification", "decision_impact": "human_in_loop",
+      "data_types": ["personal"], "deployment_geography": ["EU"],
+      "description": "Screening of job candidate resumes to rank applicants for recruitment shortlisting",
+      "intended_purpose": "Speed up hiring by ranking candidates"
+    },
+    "expected_tier": "high_risk", "expected_basis": "Annex III(4)(a)"
+  },
+  {
+    "id": "S3", "name": "Bank credit scoring",
+    "intake": {
+      "system_name": "CreditScore AI", "domain": "banking",
+      "ai_type": "prediction", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Credit scoring model assessing creditworthiness for loan approval decisions",
+      "intended_purpose": "Automate lending decisions"
+    },
+    "expected_tier": "high_risk", "expected_basis": "Annex III(5)(b)"
+  },
+  {
+    "id": "S4", "name": "Real-time biometric ID for law enforcement",
+    "intake": {
+      "system_name": "FaceWatch", "domain": "law_enforcement",
+      "ai_type": "computer_vision", "decision_impact": "advisory",
+      "data_types": ["biometric"], "deployment_geography": ["EU"],
+      "description": "Real-time facial recognition for biometric identification of individuals in public spaces by police",
+      "intended_purpose": "Identify suspects in real-time surveillance feeds"
+    },
+    "expected_tier": "prohibited", "expected_basis": "Art. 5(1)(d)"
+  },
+  {
+    "id": "S5", "name": "Workplace emotion recognition (ordering test)",
+    "intake": {
+      "system_name": "MoodTrack", "domain": "HR",
+      "ai_type": "classification", "decision_impact": "advisory",
+      "data_types": ["personal"], "deployment_geography": ["EU"],
+      "description": "Emotion recognition system monitoring employee emotional state during work hours",
+      "intended_purpose": "Workplace productivity and wellbeing monitoring"
+    },
+    "expected_tier": "prohibited", "expected_basis": "Art. 5(1)(f)"
+  },
+  {
+    "id": "S6", "name": "Customer-service chatbot",
+    "intake": {
+      "system_name": "HelpBot", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "interacts_with_humans": true,
+      "description": "Customer service chatbot answering product questions in natural conversation",
+      "intended_purpose": "Reduce support ticket volume"
+    },
+    "expected_tier": "limited_risk", "expected_basis": "Art. 50(1)"
+  },
+  {
+    "id": "S7", "name": "Marketing image generator",
+    "intake": {
+      "system_name": "AdGen", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "generates_synthetic_content": true,
+      "description": "Generates synthetic marketing images and produces text content for advertising campaigns",
+      "intended_purpose": "Automate creative asset production"
+    },
+    "expected_tier": "limited_risk", "expected_basis": "Art. 50(2)"
+  },
+  {
+    "id": "S8", "name": "Internal spam filter",
+    "intake": {
+      "system_name": "SpamGuard", "domain": "general",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "description": "Classifies internal emails as spam or not spam for inbox filtering",
+      "intended_purpose": "Reduce spam in employee inboxes"
+    },
+    "expected_tier": "minimal_risk", "expected_basis": null
+  },
+  {
+    "id": "S9", "name": "Insurance risk + biometric categorization (multi-match)",
+    "intake": {
+      "system_name": "RiskProfiler", "domain": "insurance",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial", "biometric"], "deployment_geography": ["EU"],
+      "description": "Insurance risk assessment that also performs biometric categorization of applicants for premium pricing and underwriting",
+      "intended_purpose": "Personalize insurance premiums using multiple data signals"
+    },
+    "expected_tier": "high_risk", "expected_basis": "Annex III(1)(b)"
+  },
+  {
+    "id": "S10", "name": "GPAI / foundation-model service (edge case)",
+    "intake": {
+      "system_name": "FoundationAPI", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "description": "A general-purpose foundation model API offering text generation to downstream developers",
+      "intended_purpose": "Provide a general-purpose language model as a service"
+    },
+    "expected_tier": "documented", "expected_basis": "documented"
+  }
+]
