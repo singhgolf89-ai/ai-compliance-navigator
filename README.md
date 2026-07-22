@@ -6,7 +6,7 @@ Describe an AI system in plain terms and get a structured, cited compliance repo
 
 > ⚠️ **Disclaimer:** This tool provides regulatory mapping for informational purposes only. It does not constitute legal advice. Consult qualified legal counsel for compliance determinations.
 
-**Live demo:** _[deployed URL — coming soon]_
+**Live demo:** https://ai-compliance-navigator-arya.streamlit.app/
 **Built by:** Aryaveer Singh · [GitHub](https://github.com/singhgolf89-ai) · [LinkedIn](https://www.linkedin.com/in/aryaveersingh/)
 
 ---
