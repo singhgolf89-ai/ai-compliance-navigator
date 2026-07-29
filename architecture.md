@@ -1,1321 +1,304 @@
-# AI Compliance Navigator — Databricks MVP Architecture
+# AI Compliance Navigator — Databricks Architecture (v2.0)
 
-## A RAG-powered regulatory mapping tool for EU AI Act and NIST AI RMF
+## A RAG-powered regulatory mapping tool for the EU AI Act and NIST AI RMF
 
 **Built by:** Aryaveer Singh
-**Stack:** Databricks Lakehouse + Unity Catalog + Vector Search + Foundation Model APIs + Streamlit
-**Status:** Portfolio project (MVP)
+**Stack:** Databricks Lakehouse + Unity Catalog + AI Search (Vector Search) + Foundation Model APIs + Streamlit
+**Status:** v1 MVP shipped and publicly deployed · v2 in build (see `docs/v2_build_plan.md`)
+
+---
+
+## Document purpose and how to read it
+
+This document supersedes v1.0. It serves two jobs at once:
+
+1. **As-built record of v1** — what actually shipped, including every place reality diverged from the v1.0 design (LLM choice, product renames, verified regulatory dates, deployment model). Divergences are marked **[As-built]**.
+2. **Target architecture for v2** — the audit spine, authentication, assessment history, evaluation harness, GPAI overlay, and the live-lite public tier. New components are marked **[v2]**.
+
+The companion `docs/v2_build_plan.md` holds the phased plan with Definition-of-Done gates; this document holds the *what and why*. The repository itself is the authoritative source for code — this document describes components and points to files rather than duplicating implementations.
+
 ---
 
 ## Executive Summary
 
-This document provides a Databricks-native architecture for the AI Compliance Navigator MVP. It prioritizes features for maximum demo impact within a constrained timeline and leverages Databricks' unified platform to minimize integration complexity while creating a compelling enterprise-grade story.
+The AI Compliance Navigator turns a plain-language description of an AI system into a structured, cited compliance report: an EU AI Act risk classification, the specific obligations that follow, a NIST AI RMF mapping, and a cross-framework checklist.
+
+The load-bearing design decision, unchanged from v1.0 and now empirically validated: **the compliance determination is deterministic and auditable; the LLM only retrieves and synthesizes — it never classifies.** v1 proved the grounding property under test (starved retrieval produces zero invented citations). v2 extends the same philosophy inward: the tool that makes auditable determinations becomes accountable for itself, logging every assessment with its rule trail, ruleset version, and the exact corpus version behind it — reproducible via Delta time travel.
 
 ---
 
-## MVP Feature Prioritization Analysis
+## Scope evolution
 
-### Feature Stack Ranking
+| | v1 (shipped) | v2 (in build) | v3+ (backlog) |
+|---|---|---|---|
+| Classification | 4-tier deterministic engine, `all_matches` audit field | GPAI overlay (Art. 51–56, `is_gpai` flag) | — |
+| Corpus | EU AI Act + NIST AI RMF + Playbook (455 chunks) | unchanged | +1 FS framework (Colorado SB 21-169 or NYDFS 500); broader FS stack; ISO 42001 (blocked: paywalled text) |
+| Retrieval | Two-track filtered vector search (managed) | + in-process local retrieval for public tier | reranking / hybrid search |
+| Synthesis | Llama 3.3 70B, cited JSON, defensive parser | + capped-key provider path for public tier | LLM-as-judge quality layer |
+| Persistence | none (stateless, by design) | `assessment_log` audit table + history UI + re-run diff | — |
+| Auth | none (public) / PAT (local) | `st.login` Google, pseudonymous `user_id` | service principal, roles |
+| Eval | 10-scenario suite + 3 synthesis gates | golden-set retrieval metrics in MLflow | golden-set expansion, judge models |
+| Export | Markdown | unchanged | PDF |
+| Interaction | single-shot form | unchanged | follow-up questioning (refines intake fields only — never the tier) |
 
-Based on timeline constraints (21 total hours), demo impact, and AIGP exam synergy, here's the recommended prioritization:
-
-| Priority | Feature | Hours | Rationale |
-|----------|---------|-------|-----------|
-| **P0** | EU AI Act Risk Classification Engine | 3 | Core differentiator — deterministic, auditable. Most demo impact. |
-| **P0** | Document Ingestion Pipeline | 4 | Foundation for everything. Forces deep reading for AIGP. |
-| **P0** | RAG Retrieval (EU AI Act) | 3 | Essential for compliance mapping. |
-| **P0** | LLM Synthesis with Citations | 3 | Non-negotiable for credibility. |
-| **P0** | Streamlit Frontend (Basic) | 3 | Intake form + tabbed output. |
-| **P1** | NIST AI RMF Basic Mapping | 2 | Cross-framework story is valuable for interviews. |
-| **P1** | Cross-Framework Checklist (Simplified) | 1.5 | Shows practical implementation thinking. |
-| **P2** | Markdown Export | 1 | Nice to have for demo shareability. |
-| **P2** | NIST AI 600-1 GenAI Profile | — | **DEFER to v2** — Not essential for MVP demo. |
-| **P2** | PDF Export | — | **DEFER to v2** — Markdown sufficient for MVP. |
-
-**Total P0 + P1 Hours: ~19.5 hours** (fits within 21-hour budget with buffer)
-
-### MVP Scope Summary
-
-**IN SCOPE (Build These):**
-1. AI System Intake Form (structured + free text)
-2. Deterministic EU AI Act Risk Classification (Prohibited / High-Risk / Limited / Minimal)
-3. RAG retrieval against EU AI Act + NIST AI RMF corpus
-4. LLM-generated compliance report with source citations
-5. Basic NIST AI RMF subcategory mapping
-6. Simplified cross-framework checklist
-7. Markdown export
-**OUT OF SCOPE (Defer to v2):**
-- NIST AI 600-1 GenAI Profile mapping
-- ISO 42001 mapping
-- PDF export with formatting
-- Conversational follow-up interface
-- User accounts / persistence
 ---
 
 ## Databricks Architecture Overview
 
-### Why Databricks for This MVP
+### Why Databricks — updated with tier reality **[As-built]**
 
-| Capability | Benefit for This Project |
-|------------|-------------------------|
-| **Unity Catalog** | Governance story for interviews — shows you understand enterprise AI governance |
-| **Vector Search** | Native integration, no external dependencies like Pinecone/Chroma |
-| **Foundation Model APIs** | Pay-per-token access to Claude/GPT without managing API keys in code |
-| **Delta Lake** | Versioned regulatory corpus — critical for compliance audit trails |
-| **Databricks Apps** | Native deployment option (alternative to Streamlit Cloud) |
-| **MLflow** | Experiment tracking for prompt iterations — shows MLOps maturity |
+| Capability | Benefit | Free Edition reality (verified during build) |
+|---|---|---|
+| Unity Catalog | Governed, versioned regulatory corpus | Full support; catalog/schema/volume creation works |
+| AI Search (formerly Vector Search) | Native retrieval, source/tier filtering | DELTA_SYNC supported; quota of 1 endpoint; provisioning is throttled (~15 min) |
+| Foundation Model APIs — embeddings | `databricks-bge-large-en` (1024-dim) | Available and verified |
+| Foundation Model APIs — LLMs | Managed Claude for synthesis | **Not available** on Free Edition (pay-per-token Claude gated); Databricks-hosted OSS models are |
+| Delta Lake + Change Data Feed | Audit trail; time-travel reproducibility | Full support; CDF is *required* on any Delta Sync source table |
+| MLflow | Experiment tracking | Managed tracking available in-workspace |
+| Databricks Apps | Enterprise hosting path | Unreliable on Free Edition; deferred to the paid-workspace decision gate |
 
-### High-Level Architecture
+### Core pipeline
 
+```mermaid
+flowchart TD
+    A[Intake Form<br/>Streamlit] --> B[Deterministic<br/>Classification Engine<br/>rule-based · all_matches audit trail]
+    B -->|tier + basis| C[Filtered Vector Retrieval<br/>two-track: EU tier-filtered + NIST]
+    C --> D[Grounded LLM Synthesis<br/>citation per requirement<br/>'not addressed' on gaps]
+    D --> E[Tabbed Report + Markdown Export]
+    B -.v2.-> L[(assessment_log<br/>rule trail · classifier version<br/>corpus Delta version)]
+    D -.v2.-> L
+
+    subgraph DBX[Databricks Lakehouse]
+        F[(Unity Catalog + Delta<br/>raw_documents · regulatory_chunks<br/>CDF audit trail)]
+        G[AI Search Index<br/>455 chunks · BGE 1024-dim<br/>Delta Sync TRIGGERED]
+        H[FM API<br/>Llama 3.3 70B]
+    end
+
+    F --> G
+    C -.queries.-> G
+    D -.calls.-> H
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DATABRICKS LAKEHOUSE                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────────────┐     ┌─────────────────────┐                       │
-│  │  Unity Catalog      │     │  Delta Lake         │                       │
-│  │  ─────────────────  │     │  ─────────────────  │                       │
-│  │  • compliance_db    │     │  • raw_documents    │                       │
-│  │  • regulatory_docs  │◄────│  • chunked_corpus   │                       │
-│  │  • vector_index     │     │  • chunk_metadata   │                       │
-│  └─────────────────────┘     └─────────────────────┘                       │
-│            │                           │                                    │
-│            ▼                           ▼                                    │
-│  ┌─────────────────────────────────────────────────────────────┐           │
-│  │              Databricks Vector Search                        │           │
-│  │  ─────────────────────────────────────────────────────────   │           │
-│  │  • eu_ai_act_index (Delta Sync)                              │           │
-│  │  • nist_rmf_index (Delta Sync)                               │           │
-│  │  • Embedding: Databricks BGE or OpenAI text-embedding-3-small│           │
-│  └─────────────────────────────────────────────────────────────┘           │
-│            │                                                                │
-│            ▼                                                                │
-│  ┌─────────────────────────────────────────────────────────────┐           │
-│  │         Foundation Model APIs (Model Serving)                │           │
-│  │  ─────────────────────────────────────────────────────────   │           │
-│  │  • Claude 3.5 Sonnet (via External Model) OR                 │           │
-│  │  • DBRX / Llama 3.1 70B (native)                             │           │
-│  └─────────────────────────────────────────────────────────────┘           │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         APPLICATION LAYER                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                  │
-│  │ Streamlit    │    │ Classification│    │ RAG Pipeline │                  │
-│  │ Frontend     │───▶│ Engine       │───▶│ (Retrieval + │                  │
-│  │              │    │ (Rule-based) │    │  Synthesis)  │                  │
-│  └──────────────┘    └──────────────┘    └──────────────┘                  │
-│         │                                        │                          │
-│         └────────────────────────────────────────┘                          │
-│                              │                                              │
-│                              ▼                                              │
-│                    ┌──────────────────┐                                    │
-│                    │ Report Generator │                                    │
-│                    │ (Structured JSON │                                    │
-│                    │  + Markdown)     │                                    │
-│                    └──────────────────┘                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+
+### Deployment topologies **[As-built + v2]**
+
+One codebase, three run modes selected by configuration — the mechanism that keeps the public URL bulletproof while the full live integration remains demonstrable:
+
+| Mode | Classifier | Retrieval | Synthesis | Where it runs | Purpose |
+|---|---|---|---|---|---|
+| **Local live** | in-process | Databricks AI Search (PAT) | Databricks Llama 3.3 70B (PAT) | developer laptop | full live demo; the enterprise path |
+| **Public live** | in-process | Databricks (scoped cloud PAT) | Databricks (scoped cloud PAT) | Streamlit Community Cloud | live public analysis; graceful fallback to sample on backend failure |
+| **Public demo** (`DEMO_MODE=true`) | in-process (always live) | none | pre-generated real sample (`data/sample_report.json`) | Streamlit Community Cloud | zero-backend, zero-cost, always-on |
+| **Public live-lite** **[v2]** | in-process | in-process (`bge-small` local embeddings, same-model corpus+query) | provider API, **hard $5 cap** | Streamlit Community Cloud | live analysis with zero Databricks dependency and bounded cost |
+
+Design invariant across all modes: **the deterministic classifier always runs live, in-process.** Only retrieval and synthesis vary by tier.
 
 ---
 
 ## Component Implementation Details
 
-### 1. Data Layer: Unity Catalog + Delta Lake
+### 1. Data layer — Unity Catalog + Delta Lake **[As-built]**
 
-#### Catalog Structure
+Canonical objects (all shipped):
 
-```sql
--- Create the compliance catalog and schema
-CREATE CATALOG IF NOT EXISTS ai_governance;
-USE CATALOG ai_governance;
+- Catalog/schema: `ai_governance.compliance_navigator`
+- Volume: `raw_docs` (source PDFs, uploaded via Catalog Explorer)
+- `raw_documents` — one row per source document, **CDF enabled** (audit trail on the corpus itself)
+- `regulatory_chunks` — the vector-search source table; **CDF enabled** (added post-v1.0: Delta Sync *requires* it)
+- `framework_mappings` — pre-computed EU↔NIST crosswalk (`data/framework_mappings.json` is the seed)
 
-CREATE SCHEMA IF NOT EXISTS compliance_navigator;
-USE SCHEMA compliance_navigator;
-```
+Chunk metadata (as v1.0 designed, proven in retrieval): `document_section`, `section_title`, `risk_tier`, `applicable_role`, `compliance_deadline` (verified strings — see Regulatory Currency), `framework_function` / `category_id` / `subcategory_id` for NIST, deterministic `chunk_id` (`source:section_slug:index`) giving idempotent reloads and stable citation keys.
 
-#### Delta Tables
-
-**Table 1: Raw Documents**
+**[v2] Table 4: Assessment audit log.** The v2 centerpiece — every determination the tool makes becomes queryable and reproducible:
 
 ```sql
-CREATE TABLE IF NOT EXISTS raw_documents (
-    document_id STRING,
-    source STRING,              -- 'eu_ai_act', 'nist_ai_rmf', 'nist_playbook'
-    document_name STRING,
-    version STRING,
-    effective_date DATE,
-    raw_text STRING,
-    pdf_path STRING,
-    ingestion_timestamp TIMESTAMP,
-    PRIMARY KEY (document_id)
+CREATE TABLE ai_governance.compliance_navigator.assessment_log (
+    assessment_id        STRING NOT NULL,     -- UUID
+    created_at           TIMESTAMP,
+    user_id              STRING,              -- stable auth subject (st.login), never raw email
+    session_id           STRING,
+    app_version          STRING,
+    demo_mode            BOOLEAN,
+
+    intake               STRING,              -- full SystemIntake JSON
+    system_name          STRING,
+    domain               STRING,
+
+    risk_tier            STRING,
+    primary_basis        STRING,
+    applicable_role      STRING,
+    compliance_deadline  STRING,
+    confidence           STRING,
+    all_matches          ARRAY<STRING>,       -- every rule that fired: the determination's audit trail
+    classifier_version   STRING,              -- which ruleset produced this
+
+    retrieval_query      STRING,
+    eu_chunk_ids         ARRAY<STRING>,
+    nist_chunk_ids       ARRAY<STRING>,
+    corpus_table_version BIGINT,              -- Delta version of regulatory_chunks → time-travel reproducibility
+    embedding_endpoint   STRING,
+
+    llm_endpoint         STRING,
+    llm_temperature      DOUBLE,
+    report               STRING,              -- full synthesized JSON
+    synthesis_status     STRING,              -- ok | parse_error | fallback (failures are logged too)
+    latency_ms           BIGINT,
+
+    CONSTRAINT assessment_log_pk PRIMARY KEY (assessment_id)
 ) USING DELTA
-TBLPROPERTIES (
-    'delta.enableChangeDataFeed' = 'true'  -- For audit trail
-);
+TBLPROPERTIES ('delta.enableChangeDataFeed' = 'true');
 ```
 
-**Table 2: Chunked Corpus (Vector Search Source)**
+Deliberate exclusions (privacy by design, data minimization): no IP addresses, no device fingerprints, no raw email in the log, no retrieved chunk *text* (chunk IDs + `corpus_table_version` reconstruct it via time travel). Erasure runbook: right-to-erasure = `DELETE` **plus** `VACUUM` past the retention window — Delta time travel retains deleted rows until then. Write path: `databricks-sql-connector` → serverless SQL warehouse, `sql`-scoped PAT. Logging is deliberately scoped to modes with a governed backend (local live / public live); live-lite public traffic is measured by platform analytics instead.
 
-```sql
-CREATE TABLE IF NOT EXISTS regulatory_chunks (
-    chunk_id STRING,
-    document_id STRING,
-    source STRING,
-    document_section STRING,        -- 'Article 9', 'GOVERN 1.1'
-    section_title STRING,
-    chunk_text STRING,
-    chunk_index INT,
+### 2. Ingestion + chunking **[As-built — two deviations from v1.0, both load-bearing]**
 
-    -- EU AI Act specific metadata
-    risk_tier STRING,               -- 'prohibited', 'high_risk', 'limited_risk', 'minimal_risk', 'all'
-    applicable_role STRING,         -- 'provider', 'deployer', 'importer', 'all'
-    compliance_deadline STRING,
+`notebooks/01_document_ingestion.py`. Sources from official origins only (EUR-Lex Reg. 2024/1689; NIST AI 100-1; NIST AIRC Playbook).
 
-    -- NIST specific metadata
-    framework_function STRING,      -- 'GOVERN', 'MAP', 'MEASURE', 'MANAGE'
-    category_id STRING,
-    subcategory_id STRING,
+- **Extraction: PyMuPDF, not pypdf.** EUR-Lex's letter-spaced typography caused pypdf to inject intra-word spaces ("Ar ticle"), defeating all structural parsing. PyMuPDF reconstructs words correctly; `clean_text` additionally normalizes the structural tokens the chunkers key on. Lesson institutionalized: extraction fidelity is a first-class engineering decision. (Note: PyMuPDF is AGPL — acceptable for this open repo.)
+- **Hardened, structure-aware chunking.** EU: split only on *validated* article headings — short line, `Article N` pattern, **monotonically increasing article numbers** — so inline cross-references ("…referred to in Article 6(1)…") cannot fragment chunks. Annexes chunked separately (v1.0 omitted them; Annex III is the high-risk list and must be retrievable). NIST: subcategory-ID split keeping the *longest span per ID* (defeats ToC and cross-reference noise).
+- Corpus as shipped: **455 chunks** — EU 185 (124 sections = 113 articles + annexes), NIST RMF 85 (all 72 subcategories), Playbook 185 (same 72, independently reproduced — cross-validating both parses).
 
-    -- Common metadata
-    source_url STRING,
-    token_count INT,
-    embedding_model STRING,
-    created_timestamp TIMESTAMP,
+### 3. Embeddings + AI Search index **[As-built]**
 
-    PRIMARY KEY (chunk_id)
-) USING DELTA;
-```
+`notebooks/02_create_vector_index.py`. Product rename noted: **Vector Search → AI Search**; SDK `databricks-vectorsearch` → `databricks-ai-search` (migration is a v2 Phase 5 item; the old import re-exports meanwhile).
 
-**Table 3: Cross-Framework Mappings (Pre-computed)**
+- Endpoint: `compliance-navigator-endpoint` (STANDARD) — created from code, not the UI, so the repo is the source of truth. One endpoint (free-tier quota = 1, and one is all this needs).
+- Index: `ai_governance.compliance_navigator.regulatory_chunks_index` — **single Delta Sync index** over `regulatory_chunks` with managed `databricks-bge-large-en` embeddings (1024-dim), `TRIGGERED` pipeline, PK `chunk_id`. *(v1.0 sketched two indexes, one per framework; as-built uses one index with source filtering — cheaper, simpler, and filtering does the same job.)*
+- Operational learnings baked into the notebook: readiness is polled via `describe()` (the SDK's `wait_until_ready` signature drifted to `timedelta`); an interrupted first sync leaves an index that "exists but is not ready" — the only repair is delete + recreate; Free Edition throttles pipeline provisioning (~15 min is normal).
 
-```sql
-CREATE TABLE IF NOT EXISTS framework_mappings (
-    mapping_id STRING,
-    eu_article STRING,
-    eu_requirement_summary STRING,
-    nist_subcategory STRING,
-    nist_outcome STRING,
-    implementation_action STRING,
-    mapping_rationale STRING,
-    PRIMARY KEY (mapping_id)
-) USING DELTA;
-```
+### 4. Classification engine **[As-built + v2 overlay]**
 
-### 2. Document Ingestion Pipeline
+`src/classification_engine.py`. Deterministic, rule-based, mirroring the Act's own evaluation order: **Article 5 (prohibited) → Article 6/Annex III (high-risk) → Article 50 (transparency) → minimal.** Ordering is proven by test S5: workplace emotion recognition classifies *prohibited*, not high-risk, because prohibited is checked first.
 
-#### Chunking Strategy (Domain-Specific)
+- Output (`ClassificationResult`): tier, `primary_basis` (article/annex citation), applicable articles, role, verified deadline string, reasoning, confidence, and **`all_matches`** — every rule that fired, not just the winner. That field is the determination's own audit trail and feeds `assessment_log` in v2.
+- **[v2] GPAI overlay.** GPAI (Art. 51–56) is a parallel regime, not a fifth tier — a GPAI system still has a use-case tier. Modeled as `is_gpai: bool` + `gpai_articles: list` on the result (2 August 2025 applicability; systemic-risk threshold documented as a sub-case). Preserves the four-tier enum and is the legally correct shape. Upgrades test S10 from documented-edge-case to hard assertion.
+- `CLASSIFIER_VERSION` **[v2]** constant in `src/utils.py`, stamped on every logged assessment — "which version of the rules made this determination" is the question a real audit asks.
 
-The chunking approach preserves the hierarchical structure of regulatory text:
+### 5. Retrieval **[As-built + v2 local variant]**
 
-```python
-# Databricks Notebook: 01_document_ingestion
+`src/retrieval.py` — **two-track filtered retrieval**, a design forced by evidence: a blind mixed query buries the on-point EU provisions under NIST vocabulary. As built: one query filtered `source=eu_ai_act` **and** `risk_tier ∈ {tier, 'all'}`; a second filtered to the NIST sources. Query construction is deliberately rich (description + tier + intent keywords) — terse queries rank procedural articles above substantive ones. Verified: "insurance creditworthiness" surfaces Articles 6/8/9/12 at `high_risk`; the tier filter never leaks forbidden tiers.
 
-from pyspark.sql import functions as F
-from pyspark.sql.types import *
-import re
+**[v2] `src/retrieval_local.py`** — same interface, selected by `PUBLIC_RETRIEVAL` config, backing the live-lite tier: 455 chunks re-embedded once with `bge-small-en-v1.5` (384-dim) via `scripts/embed_corpus_local.py`, shipped as `data/corpus_embeddings.npz` + metadata; query embedded at runtime with the *same local model*. The consistency rule (index-time and query-time embeddings must share one model) is preserved *within* each tier; the local 384-dim space is independent of the managed 1024-dim index, which remains the entitled-workspace path.
 
-# EU AI Act Chunking Logic
-def chunk_eu_ai_act(text: str, article_pattern: str = r"Article\s+(\d+)") -> list:
-    """
-    Chunk EU AI Act by article. Each article is a self-contained obligation.
-    For long articles (>500 tokens), chunk by paragraph with article context.
-    """
-    chunks = []
-    articles = re.split(r'(?=Article\s+\d+)', text)
+### 6. LLM synthesis **[As-built — the largest deviation from v1.0]**
 
-    for article in articles:
-        if not article.strip():
-            continue
+`src/llm_synthesis.py`. v1.0 specified Claude via an external Model Serving endpoint. **As built: Free Edition exposes no pay-per-token Claude** (verified empirically: 404s and a "rate limit of 0"), so synthesis runs on Databricks-hosted **`databricks-meta-llama-3-3-70b-instruct`** (fallback `llama-3-1-8b`) — fully internal, no external keys, one-line swap to Claude on an entitled workspace via `LLM_ENDPOINT`.
 
-        # Extract article number and title
-        match = re.match(r'Article\s+(\d+)\s*[:\.\-]?\s*(.+?)(?:\n|$)', article)
-        if match:
-            article_num = match.group(1)
-            article_title = match.group(2).strip()
+Grounding guarantees, all test-verified:
+- System prompt derived from the compliance-instructions persona, scoped to the EU+NIST corpus: ground only in provided chunks; cite every requirement (`[EU AI Act Art. X]` / `[NIST AI RMF FUNCTION X.Y]`); on gaps, emit exactly *"Not addressed in retrieved sources — manual review recommended"*; never re-classify (the tier is input, not output); plain-language explanation included.
+- Low temperature (0.1) + `_extract_json` defensive parser (fence-strip, brace-clip) for open-model output → **schema-valid JSON 3/3 consecutive runs**.
+- **Starved-retrieval test: fed empty context, the model invented zero articles** — every ungroundable field carried the "not addressed" sentence. The no-invention property is empirical, not aspirational.
+- **[v2]** a provider-API call path with a hard $5 spend cap serves the live-lite tier behind the same function signature.
 
-            # Determine applicable risk tier and role from article number
-            risk_tier, role = get_article_applicability(article_num)
+### 7. Frontend, auth, and secrets **[As-built + v2]**
 
-            # Check token count (approximate: 1 token ≈ 4 chars)
-            if len(article) / 4 > 500:
-                # Chunk by paragraph for long articles
-                paragraphs = article.split('\n\n')
-                for i, para in enumerate(paragraphs):
-                    if len(para.strip()) > 50:  # Skip very short fragments
-                        chunks.append({
-                            'document_section': f'Article {article_num}',
-                            'section_title': article_title,
-                            'chunk_text': f"Article {article_num} - {article_title}\n\n{para.strip()}",
-                            'risk_tier': risk_tier,
-                            'applicable_role': role,
-                            'chunk_index': i
-                        })
-            else:
-                chunks.append({
-                    'document_section': f'Article {article_num}',
-                    'section_title': article_title,
-                    'chunk_text': article.strip(),
-                    'risk_tier': risk_tier,
-                    'applicable_role': role,
-                    'chunk_index': 0
-                })
+`app.py` (Streamlit). Intake form covering all `SystemIntake` fields → classification (instant, in-process) → spinner → tabbed report (EU obligations as expandable cited rows / NIST mapping / cross-framework checklist table / Export) → Markdown download. Disclaimer persistent in sidebar and embedded in every export. Errors degrade gracefully: empty-form validation; backend failure serves the sample report with a warning banner — stack traces never reach the UI.
 
-    return chunks
+Secrets model:
+- Local: `.streamlit/secrets.toml` (gitignored, verified by `git check-ignore`) holding host + PAT scoped to **model-serving + vector-search only**.
+- Cloud: Streamlit secrets manager; a *separate* `streamlit-cloud` PAT (per-surface tokens → independent revocation). `DEMO_MODE` flag selects the topology. PAT expiry (~90 days) silently degrades the app to fallback-sample — a calendar reminder is part of the runbook.
+- **[v2]** `st.login` (Google): `user_id` = stable subject identifier; raw email never enters the audit log; one-line privacy notice in the sidebar. The enterprise path — workspace-identity auth via Databricks Apps — is documented, not built, pending the paid-workspace gate.
 
-def get_article_applicability(article_num: str) -> tuple:
-    """Map EU AI Act articles to risk tiers and roles."""
-    article_num = int(article_num)
+### 8. Evaluation **[As-built + v2]**
 
-    # Prohibited practices
-    if article_num == 5:
-        return 'prohibited', 'all'
+As built (`tests/`): 4 unit tests + a **10-scenario suite** (`test_scenarios.json`, S1–S10) spanning all four tiers and the edge cases that matter — rule ordering (S5), multi-category first-match resolution (S9), minimal-risk fall-through (S8), GPAI documented limitation (S10, becomes an assertion in v2). Synthesis gates: schema validity ×3, 100% citation coverage, starved-retrieval no-invention.
 
-    # High-risk system requirements (provider obligations)
-    if article_num in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]:
-        return 'high_risk', 'provider'
-
-    # Deployer obligations
-    if article_num == 26:
-        return 'high_risk', 'deployer'
-
-    # Transparency obligations (limited risk)
-    if article_num == 50:
-        return 'limited_risk', 'all'
-
-    # GPAI provisions
-    if article_num in range(51, 57):
-        return 'all', 'provider'
-
-    return 'all', 'all'
-
-
-# NIST AI RMF Chunking Logic
-def chunk_nist_rmf(text: str) -> list:
-    """
-    Chunk NIST AI RMF by subcategory.
-    Each subcategory has: ID, outcome statement, description.
-    """
-    chunks = []
-    # Pattern matches: GOVERN 1.1, MAP 2.3, MEASURE 1.2, MANAGE 4.1
-    subcategory_pattern = r'(GOVERN|MAP|MEASURE|MANAGE)\s+(\d+\.\d+)'
-
-    sections = re.split(subcategory_pattern, text)
-
-    i = 0
-    while i < len(sections) - 2:
-        function = sections[i+1]  # GOVERN, MAP, etc.
-        subcategory_num = sections[i+2]  # 1.1, 2.3, etc.
-        content = sections[i+3] if i+3 < len(sections) else ""
-
-        # Extract outcome statement (usually first sentence)
-        outcome_match = re.match(r'[:\s]*([^.]+\.)', content)
-        outcome = outcome_match.group(1).strip() if outcome_match else ""
-
-        chunks.append({
-            'document_section': f'{function} {subcategory_num}',
-            'section_title': outcome[:100],  # Truncate for title
-            'chunk_text': f"{function} {subcategory_num}\n\n{content.strip()}",
-            'framework_function': function,
-            'category_id': f"{function} {subcategory_num.split('.')[0]}",
-            'subcategory_id': f"{function} {subcategory_num}",
-            'chunk_index': 0
-        })
-        i += 3
-
-    return chunks
-```
-
-#### Embedding Generation
-
-```python
-# Using Databricks Foundation Model APIs for embeddings
-from databricks.vector_search.client import VectorSearchClient
-
-# Option 1: Databricks BGE (recommended for cost)
-def generate_embeddings_databricks(texts: list) -> list:
-    """Generate embeddings using Databricks Foundation Model endpoint."""
-    import mlflow.deployments
-
-    client = mlflow.deployments.get_deploy_client("databricks")
-
-    response = client.predict(
-        endpoint="databricks-bge-large-en",
-        inputs={"input": texts}
-    )
-
-    return [item["embedding"] for item in response["data"]]
-
-# Option 2: OpenAI (higher quality, more cost)
-def generate_embeddings_openai(texts: list) -> list:
-    """Generate embeddings using OpenAI via External Model endpoint."""
-    import mlflow.deployments
-
-    client = mlflow.deployments.get_deploy_client("databricks")
-
-    response = client.predict(
-        endpoint="openai-text-embedding-3-small",  # Configure in Model Serving
-        inputs={"input": texts}
-    )
-
-    return [item["embedding"] for item in response["data"]]
-```
-
-### 3. Databricks Vector Search Setup
-
-#### Create Vector Search Endpoint
-
-```python
-from databricks.vector_search.client import VectorSearchClient
-
-vsc = VectorSearchClient()
-
-# Create endpoint (one-time setup)
-vsc.create_endpoint(
-    name="compliance-navigator-endpoint",
-    endpoint_type="STANDARD"  # Use STANDARD for production-like behavior
-)
-```
-
-#### Create Delta Sync Index
-
-```python
-# Create vector index that syncs from Delta table
-vsc.create_delta_sync_index(
-    endpoint_name="compliance-navigator-endpoint",
-    index_name="ai_governance.compliance_navigator.regulatory_chunks_index",
-    source_table_name="ai_governance.compliance_navigator.regulatory_chunks",
-    pipeline_type="TRIGGERED",  # Manual sync for MVP; use CONTINUOUS for production
-    primary_key="chunk_id",
-    embedding_source_column="chunk_text",
-    embedding_model_endpoint_name="databricks-bge-large-en",  # Auto-generate embeddings
-    embedding_dimension=1024  # BGE-large dimension
-)
-
-# Sync the index
-vsc.get_index(
-    endpoint_name="compliance-navigator-endpoint",
-    index_name="ai_governance.compliance_navigator.regulatory_chunks_index"
-).sync()
-```
-
-#### Retrieval Function
-
-```python
-def retrieve_compliance_requirements(
-    system_description: str,
-    risk_tier: str,
-    num_results: int = 15
-) -> dict:
-    """
-    Retrieve relevant regulatory chunks based on system description and risk tier.
-    Returns EU AI Act and NIST AI RMF chunks separately.
-    """
-    from databricks.vector_search.client import VectorSearchClient
-
-    vsc = VectorSearchClient()
-    index = vsc.get_index(
-        endpoint_name="compliance-navigator-endpoint",
-        index_name="ai_governance.compliance_navigator.regulatory_chunks_index"
-    )
-
-    # Build query with context
-    query = f"""
-    AI System Description: {system_description}
-    Risk Classification: {risk_tier}
-    Find: applicable regulatory requirements, obligations, and compliance controls
-    """
-
-    # Build filter for risk tier
-    # Include chunks that apply to this tier OR apply to all tiers
-    tier_filter = {
-        "risk_tier": ["high_risk", "all"] if risk_tier == "high_risk" else [risk_tier, "all"]
-    }
-
-    # Retrieve EU AI Act chunks
-    eu_results = index.similarity_search(
-        query_text=query,
-        columns=["chunk_id", "document_section", "section_title", "chunk_text",
-                 "risk_tier", "applicable_role", "source_url"],
-        filters={"source": "eu_ai_act", **tier_filter},
-        num_results=10
-    )
-
-    # Retrieve NIST AI RMF chunks
-    nist_results = index.similarity_search(
-        query_text=query,
-        columns=["chunk_id", "document_section", "section_title", "chunk_text",
-                 "framework_function", "subcategory_id", "source_url"],
-        filters={"source": ["nist_ai_rmf", "nist_playbook"]},
-        num_results=10
-    )
-
-    return {
-        "eu_ai_act": eu_results["result"]["data_array"],
-        "nist_rmf": nist_results["result"]["data_array"]
-    }
-```
-
-### 4. Classification Engine (Deterministic)
-
-This is the most critical component for credibility. The classification MUST be rule-based, not LLM-generated.
-
-```python
-# classification_engine.py
-
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
-from enum import Enum
-
-class RiskTier(Enum):
-    PROHIBITED = "prohibited"
-    HIGH_RISK = "high_risk"
-    LIMITED_RISK = "limited_risk"
-    MINIMAL_RISK = "minimal_risk"
-
-class Role(Enum):
-    PROVIDER = "provider"
-    DEPLOYER = "deployer"
-    IMPORTER = "importer"
-
-@dataclass
-class SystemIntake:
-    """Structured input from the intake form."""
-    system_name: str
-    description: str
-    domain: str                          # insurance, banking, healthcare, HR, law_enforcement, general
-    ai_type: str                         # classification, prediction, generative, recommendation, cv, nlp
-    decision_impact: str                 # fully_automated, human_in_loop, advisory
-    data_types: List[str]                # personal, biometric, health, financial, criminal, children, none
-    intended_purpose: str
-    deployment_geography: List[str]      # EU, US, both, other
-
-    # Additional fields for classification
-    interacts_with_humans: bool = False
-    generates_synthetic_content: bool = False
-    is_safety_component: bool = False
-
-@dataclass
-class ClassificationResult:
-    """Output of the classification engine."""
-    risk_tier: RiskTier
-    primary_basis: str                   # e.g., "Annex III, Category 4(a)"
-    applicable_articles: List[str]
-    applicable_role: Role
-    compliance_deadline: str
-    reasoning: str
-    confidence: str                      # 'high', 'medium', 'requires_review'
-
-
-def classify_risk_tier(intake: SystemIntake) -> ClassificationResult:
-    """
-    Rule-based EU AI Act risk classification.
-    Deterministic and auditable — NOT LLM-dependent.
-    """
-
-    # ═══════════════════════════════════════════════════════════════════
-    # STEP 1: Check Prohibited Practices (Article 5)
-    # ═══════════════════════════════════════════════════════════════════
-
-    prohibited_checks = []
-
-    # Art 5(1)(a): Subliminal manipulation
-    if "subliminal" in intake.description.lower() or "manipulat" in intake.description.lower():
-        prohibited_checks.append(("Art. 5(1)(a)", "Subliminal manipulation techniques"))
-
-    # Art 5(1)(b): Exploiting vulnerabilities
-    vulnerable_keywords = ["vulnerable", "disability", "elderly", "children"]
-    if any(kw in intake.description.lower() for kw in vulnerable_keywords) and "exploit" in intake.description.lower():
-        prohibited_checks.append(("Art. 5(1)(b)", "Exploitation of vulnerabilities"))
-
-    # Art 5(1)(c): Social scoring by government
-    if intake.domain == "government" and "social scor" in intake.description.lower():
-        prohibited_checks.append(("Art. 5(1)(c)", "Social scoring by public authorities"))
-
-    # Art 5(1)(d): Real-time biometric identification for law enforcement
-    if (intake.domain == "law_enforcement" and
-        "biometric" in intake.data_types and
-        "real-time" in intake.description.lower()):
-        prohibited_checks.append(("Art. 5(1)(d)", "Real-time biometric ID for law enforcement"))
-
-    # Art 5(1)(f): Emotion recognition in workplace/education
-    emotion_keywords = ["emotion recognition", "emotion detection", "emotional state", "sentiment analysis"]
-    if (any(kw in intake.description.lower() for kw in emotion_keywords) and
-        intake.domain in ["HR", "education", "workplace"]):
-        prohibited_checks.append(("Art. 5(1)(f)", "Emotion recognition in workplace/education"))
-
-    if prohibited_checks:
-        return ClassificationResult(
-            risk_tier=RiskTier.PROHIBITED,
-            primary_basis=prohibited_checks[0][0],
-            applicable_articles=["Article 5"],
-            applicable_role=Role.PROVIDER,
-            compliance_deadline="February 2, 2025 (already in effect)",
-            reasoning=f"System falls under prohibited practice: {prohibited_checks[0][1]}",
-            confidence="high"
-        )
-
-    # ═══════════════════════════════════════════════════════════════════
-    # STEP 2: Check High-Risk via Annex III Categories
-    # ═══════════════════════════════════════════════════════════════════
-
-    high_risk_matches = []
-
-    # Category 1: Biometric identification and categorization
-    if "biometric" in intake.data_types:
-        if "identification" in intake.description.lower():
-            high_risk_matches.append(("Annex III(1)(a)", "Remote biometric identification"))
-        if "categori" in intake.description.lower():
-            high_risk_matches.append(("Annex III(1)(b)", "Biometric categorization"))
-
-    # Category 2: Critical infrastructure
-    critical_infra_keywords = ["energy", "water", "gas", "heating", "traffic", "transport"]
-    if any(kw in intake.description.lower() for kw in critical_infra_keywords):
-        if intake.is_safety_component:
-            high_risk_matches.append(("Annex III(2)", "Safety component of critical infrastructure"))
-
-    # Category 3: Education and vocational training
-    if intake.domain == "education":
-        education_keywords = ["admission", "assessment", "exam", "grade", "learning outcome"]
-        if any(kw in intake.description.lower() for kw in education_keywords):
-            high_risk_matches.append(("Annex III(3)", "Access to or assessment in education"))
-
-    # Category 4: Employment and workers management (COMMON)
-    if intake.domain in ["HR", "employment", "workforce"]:
-        hr_keywords = ["recruit", "hiring", "screening", "candidate", "resume", "cv",
-                       "task allocation", "monitor", "evaluat", "promotion", "termination"]
-        if any(kw in intake.description.lower() for kw in hr_keywords):
-            high_risk_matches.append(("Annex III(4)(a)", "Recruitment and selection"))
-
-    # Category 5: Access to essential services (VERY COMMON for insurance/banking)
-    if intake.domain in ["insurance", "banking", "financial"]:
-        essential_keywords = ["creditworth", "credit scor", "insurance pric", "risk assessment",
-                              "premium", "underwriting", "claims", "eligibility"]
-        if any(kw in intake.description.lower() for kw in essential_keywords):
-            high_risk_matches.append(("Annex III(5)(b)", "Creditworthiness/insurance risk assessment"))
-
-    # Category 6: Law enforcement
-    if intake.domain == "law_enforcement":
-        le_keywords = ["risk assessment", "evidence", "crime predict", "profil"]
-        if any(kw in intake.description.lower() for kw in le_keywords):
-            high_risk_matches.append(("Annex III(6)", "Law enforcement AI"))
-
-    # Category 7: Migration, asylum, border control
-    migration_keywords = ["asylum", "visa", "border", "migration", "refugee"]
-    if any(kw in intake.description.lower() for kw in migration_keywords):
-        high_risk_matches.append(("Annex III(7)", "Migration and border control"))
-
-    # Category 8: Administration of justice
-    justice_keywords = ["judicial", "sentencing", "court", "legal research", "dispute"]
-    if any(kw in intake.description.lower() for kw in justice_keywords):
-        high_risk_matches.append(("Annex III(8)", "Administration of justice"))
-
-    if high_risk_matches:
-        # Determine role based on deployment context
-        role = Role.PROVIDER  # Default
-        if "deploy" in intake.description.lower() or "using" in intake.description.lower():
-            role = Role.DEPLOYER
-
-        return ClassificationResult(
-            risk_tier=RiskTier.HIGH_RISK,
-            primary_basis=high_risk_matches[0][0],
-            applicable_articles=[
-                "Article 6 (High-risk classification)",
-                "Article 9 (Risk management system)",
-                "Article 10 (Data governance)",
-                "Article 11 (Technical documentation)",
-                "Article 13 (Transparency)",
-                "Article 14 (Human oversight)",
-                "Article 15 (Accuracy, robustness, cybersecurity)",
-                "Article 26 (Deployer obligations)" if role == Role.DEPLOYER else None
-            ],
-            applicable_role=role,
-            compliance_deadline="August 2, 2026",
-            reasoning=f"System matches high-risk use case: {high_risk_matches[0][1]}",
-            confidence="high" if len(high_risk_matches) >= 1 else "medium"
-        )
-
-    # ═══════════════════════════════════════════════════════════════════
-    # STEP 3: Check Limited Risk (Article 50 Transparency)
-    # ═══════════════════════════════════════════════════════════════════
-
-    limited_risk_triggers = []
-
-    # Chatbots, voice assistants, customer service AI
-    if intake.interacts_with_humans or intake.ai_type in ["generative", "nlp"]:
-        interaction_keywords = ["chatbot", "assistant", "customer service", "conversation", "dialogue"]
-        if any(kw in intake.description.lower() for kw in interaction_keywords):
-            limited_risk_triggers.append(("Art. 50(1)", "Human-interacting AI system"))
-
-    # Synthetic content generation (deepfakes, AI-generated text/images)
-    if intake.generates_synthetic_content or intake.ai_type == "generative":
-        synthetic_keywords = ["generat", "synthetic", "deepfake", "create content", "produce text"]
-        if any(kw in intake.description.lower() for kw in synthetic_keywords):
-            limited_risk_triggers.append(("Art. 50(2)", "AI-generated content"))
-
-    if limited_risk_triggers:
-        return ClassificationResult(
-            risk_tier=RiskTier.LIMITED_RISK,
-            primary_basis=limited_risk_triggers[0][0],
-            applicable_articles=["Article 50 (Transparency obligations)"],
-            applicable_role=Role.PROVIDER,
-            compliance_deadline="August 2, 2025",
-            reasoning=f"System requires transparency: {limited_risk_triggers[0][1]}",
-            confidence="high"
-        )
-
-    # ═══════════════════════════════════════════════════════════════════
-    # STEP 4: Default to Minimal Risk
-    # ═══════════════════════════════════════════════════════════════════
-
-    return ClassificationResult(
-        risk_tier=RiskTier.MINIMAL_RISK,
-        primary_basis="No specific category matched",
-        applicable_articles=["No mandatory requirements (voluntary codes encouraged)"],
-        applicable_role=Role.PROVIDER,
-        compliance_deadline="N/A",
-        reasoning="System does not match prohibited, high-risk, or limited risk criteria",
-        confidence="medium"
-    )
-```
-
-### 5. LLM Synthesis Layer
-
-#### Foundation Model Configuration
-
-```python
-# Option 1: Use Databricks External Model (Claude/GPT via Model Serving)
-# This requires setting up an external model endpoint in Databricks
-
-import mlflow.deployments
-
-def create_external_model_endpoint():
-    """One-time setup: Create endpoint for Claude via Model Serving."""
-    client = mlflow.deployments.get_deploy_client("databricks")
-
-    # Create endpoint pointing to Anthropic
-    client.create_endpoint(
-        name="claude-sonnet-compliance",
-        config={
-            "served_entities": [{
-                "external_model": {
-                    "name": "claude-3-5-sonnet",
-                    "provider": "anthropic",
-                    "task": "llm/v1/chat",
-                    "anthropic_config": {
-                        "anthropic_api_key": "{{secrets/compliance-navigator/anthropic-api-key}}"
-                    }
-                }
-            }]
-        }
-    )
-```
-
-#### Synthesis Function with Structured Output
-
-```python
-# llm_synthesis.py
-
-import json
-from typing import Dict, List
-import mlflow.deployments
-
-SYSTEM_PROMPT = """You are an AI compliance analyst specializing in EU AI Act and NIST AI RMF.
-Given regulatory text retrieved from these frameworks, generate a structured compliance assessment.
-
-CRITICAL RULES:
-1. ONLY use information from the provided regulatory text chunks. Do NOT invent requirements.
-2. EVERY requirement MUST include a specific citation: [EU AI Act Art. X(Y)] or [NIST AI RMF FUNCTION X.Y]
-3. If retrieved text lacks relevant information, state: "Not addressed in retrieved sources — manual review recommended."
-4. Do NOT provide legal advice. Frame outputs as "regulatory mapping for review by qualified counsel."
-5. Return ONLY valid JSON matching the specified schema.
-
-OUTPUT SCHEMA:
-{
-  "risk_classification": {
-    "tier": "high_risk",
-    "basis": "Annex III, Category 5(b)",
-    "citation": "[EU AI Act Art. 6(2), Annex III(5)(b)]",
-    "explanation": "Brief explanation of why this classification applies"
-  },
-  "eu_ai_act_obligations": [
-    {
-      "article": "Article 9",
-      "requirement": "Risk Management System",
-      "summary": "Establish and maintain a risk management system...",
-      "role": "provider",
-      "deadline": "August 2, 2026",
-      "citation": "[EU AI Act Art. 9(1)]"
-    }
-  ],
-  "nist_rmf_mapping": [
-    {
-      "subcategory": "GOVERN 1.1",
-      "function": "GOVERN",
-      "outcome": "Legal and regulatory requirements are understood...",
-      "suggested_actions": ["Action 1", "Action 2"],
-      "citation": "[NIST AI RMF GOVERN 1.1]"
-    }
-  ],
-  "cross_framework_checklist": [
-    {
-      "eu_requirement": "Risk management system [Art. 9]",
-      "nist_mapping": "MAP 1.1, MAP 1.5, MANAGE 1.1",
-      "implementation_action": "Establish continuous risk identification process"
-    }
-  ],
-  "key_deadlines": [
-    {
-      "deadline": "August 2, 2026",
-      "applies_to": "High-risk AI system requirements",
-      "citation": "[EU AI Act Art. 113]"
-    }
-  ]
-}"""
-
-
-def synthesize_compliance_report(
-    system_description: str,
-    classification_result: dict,
-    retrieved_chunks: dict
-) -> dict:
-    """
-    Generate structured compliance report using LLM synthesis.
-    """
-    client = mlflow.deployments.get_deploy_client("databricks")
-
-    # Format retrieved chunks for context
-    eu_context = "\n\n".join([
-        f"--- {chunk['document_section']}: {chunk['section_title']} ---\n{chunk['chunk_text']}"
-        for chunk in retrieved_chunks["eu_ai_act"]
-    ])
-
-    nist_context = "\n\n".join([
-        f"--- {chunk['document_section']} ---\n{chunk['chunk_text']}"
-        for chunk in retrieved_chunks["nist_rmf"]
-    ])
-
-    user_prompt = f"""
-SYSTEM UNDER ASSESSMENT:
-{system_description}
-
-PRE-DETERMINED RISK CLASSIFICATION (from rule-based engine):
-- Tier: {classification_result['risk_tier']}
-- Basis: {classification_result['primary_basis']}
-- Reasoning: {classification_result['reasoning']}
-
-RETRIEVED EU AI ACT PROVISIONS:
-{eu_context}
-
-RETRIEVED NIST AI RMF GUIDANCE:
-{nist_context}
-
-Generate a structured compliance report based on the above. Include specific citations for every requirement.
-Return ONLY valid JSON matching the schema in your instructions.
-"""
-
-    response = client.predict(
-        endpoint="claude-sonnet-compliance",  # Or your configured endpoint
-        inputs={
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            "max_tokens": 4000,
-            "temperature": 0.1  # Low temperature for consistency
-        }
-    )
-
-    # Parse JSON response
-    response_text = response["choices"][0]["message"]["content"]
-
-    # Handle potential markdown code blocks
-    if "```json" in response_text:
-        response_text = response_text.split("```json")[1].split("```")[0]
-    elif "```" in response_text:
-        response_text = response_text.split("```")[1].split("```")[0]
-
-    return json.loads(response_text.strip())
-```
-
-### 6. Streamlit Frontend
-
-```python
-# app.py - Streamlit application
-
-import streamlit as st
-import json
-from classification_engine import classify_risk_tier, SystemIntake
-from retrieval import retrieve_compliance_requirements
-from llm_synthesis import synthesize_compliance_report
-
-# Page config
-st.set_page_config(
-    page_title="AI Compliance Navigator",
-    page_icon="⚖️",
-    layout="wide"
-)
-
-# Header
-st.title("⚖️ AI Compliance Navigator")
-st.markdown("*Regulatory mapping for EU AI Act and NIST AI RMF*")
-st.markdown("---")
-
-# Sidebar disclaimer
-with st.sidebar:
-    st.warning("""
-    **Disclaimer**
-
-    This tool provides regulatory mapping for informational purposes only.
-    It does not constitute legal advice. Consult qualified legal counsel
-    for compliance determinations.
-    """)
-    st.markdown("---")
-    st.markdown("**Built with:**")
-    st.markdown("• Databricks Lakehouse")
-    st.markdown("• Vector Search")
-    st.markdown("• Foundation Model APIs")
-
-# ═══════════════════════════════════════════════════════════════════
-# TAB 1: INTAKE FORM
-# ═══════════════════════════════════════════════════════════════════
-
-tab1, tab2 = st.tabs(["📝 System Intake", "📊 Compliance Report"])
-
-with tab1:
-    st.header("Describe Your AI System")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        system_name = st.text_input("System Name", placeholder="e.g., Claims Triage Model")
-
-        domain = st.selectbox(
-            "Domain / Industry",
-            ["insurance", "banking", "healthcare", "HR", "law_enforcement", "education", "general"]
-        )
-
-        ai_type = st.selectbox(
-            "AI Type",
-            ["classification", "prediction", "generative", "recommendation", "computer_vision", "nlp", "other"]
-        )
-
-        decision_impact = st.selectbox(
-            "Decision Impact",
-            ["fully_automated", "human_in_loop", "advisory"],
-            format_func=lambda x: {
-                "fully_automated": "Fully Automated Decisions",
-                "human_in_loop": "Human-in-the-Loop",
-                "advisory": "Advisory / Support Only"
-            }[x]
-        )
-
-    with col2:
-        data_types = st.multiselect(
-            "Data Types Processed",
-            ["personal", "biometric", "health", "financial", "criminal", "children", "none"],
-            default=["none"]
-        )
-
-        deployment_geography = st.multiselect(
-            "Deployment Geography",
-            ["EU", "US", "both", "other"],
-            default=["EU"]
-        )
-
-        interacts_with_humans = st.checkbox("Interacts directly with humans (chatbot, voice assistant)")
-        generates_synthetic = st.checkbox("Generates synthetic content (text, images, video)")
-
-    description = st.text_area(
-        "System Description",
-        placeholder="Describe what the AI system does, how it makes decisions, and its intended use case...",
-        height=150
-    )
-
-    intended_purpose = st.text_area(
-        "Intended Purpose",
-        placeholder="What specific problem does this system solve? Who are the end users?",
-        height=100
-    )
-
-    # Submit button
-    if st.button("🔍 Analyze Compliance Requirements", type="primary", use_container_width=True):
-        if not system_name or not description:
-            st.error("Please provide at least a system name and description.")
-        else:
-            with st.spinner("Analyzing regulatory requirements..."):
-                # Create intake object
-                intake = SystemIntake(
-                    system_name=system_name,
-                    description=description,
-                    domain=domain,
-                    ai_type=ai_type,
-                    decision_impact=decision_impact,
-                    data_types=data_types,
-                    intended_purpose=intended_purpose,
-                    deployment_geography=deployment_geography,
-                    interacts_with_humans=interacts_with_humans,
-                    generates_synthetic_content=generates_synthetic
-                )
-
-                # Step 1: Classify risk tier (deterministic)
-                classification = classify_risk_tier(intake)
-
-                # Step 2: Retrieve relevant chunks
-                chunks = retrieve_compliance_requirements(
-                    system_description=f"{description}\n\nPurpose: {intended_purpose}",
-                    risk_tier=classification.risk_tier.value
-                )
-
-                # Step 3: LLM synthesis
-                report = synthesize_compliance_report(
-                    system_description=f"{system_name}: {description}",
-                    classification_result={
-                        "risk_tier": classification.risk_tier.value,
-                        "primary_basis": classification.primary_basis,
-                        "reasoning": classification.reasoning
-                    },
-                    retrieved_chunks=chunks
-                )
-
-                # Store in session state
-                st.session_state["classification"] = classification
-                st.session_state["report"] = report
-                st.session_state["system_name"] = system_name
-
-                st.success("Analysis complete! View results in the Compliance Report tab.")
-
-# ═══════════════════════════════════════════════════════════════════
-# TAB 2: COMPLIANCE REPORT
-# ═══════════════════════════════════════════════════════════════════
-
-with tab2:
-    if "report" not in st.session_state:
-        st.info("Submit an AI system for analysis to view the compliance report.")
-    else:
-        classification = st.session_state["classification"]
-        report = st.session_state["report"]
-        system_name = st.session_state["system_name"]
-
-        st.header(f"Compliance Report: {system_name}")
-
-        # Risk Classification Banner
-        tier_colors = {
-            "prohibited": "🔴",
-            "high_risk": "🟠",
-            "limited_risk": "🟡",
-            "minimal_risk": "🟢"
-        }
-
-        tier_display = classification.risk_tier.value.replace("_", " ").title()
-        st.markdown(f"### {tier_colors.get(classification.risk_tier.value, '⚪')} Risk Classification: **{tier_display}**")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Basis:** {classification.primary_basis}")
-            st.markdown(f"**Role:** {classification.applicable_role.value.title()}")
-        with col2:
-            st.markdown(f"**Compliance Deadline:** {classification.compliance_deadline}")
-            st.markdown(f"**Confidence:** {classification.confidence.title()}")
-
-        st.markdown(f"**Reasoning:** {classification.reasoning}")
-
-        st.markdown("---")
-
-        # Sub-tabs for detailed sections
-        subtab1, subtab2, subtab3, subtab4 = st.tabs([
-            "EU AI Act Obligations",
-            "NIST AI RMF Mapping",
-            "Cross-Framework Checklist",
-            "Export Report"
-        ])
-
-        with subtab1:
-            st.subheader("Applicable EU AI Act Requirements")
-            for obligation in report.get("eu_ai_act_obligations", []):
-                with st.expander(f"📜 {obligation['article']}: {obligation['requirement']}"):
-                    st.markdown(f"**Summary:** {obligation['summary']}")
-                    st.markdown(f"**Applicable Role:** {obligation['role'].title()}")
-                    st.markdown(f"**Deadline:** {obligation['deadline']}")
-                    st.caption(f"Citation: {obligation['citation']}")
-
-        with subtab2:
-            st.subheader("NIST AI RMF Subcategory Mapping")
-            for mapping in report.get("nist_rmf_mapping", []):
-                with st.expander(f"🔷 {mapping['subcategory']}: {mapping['outcome'][:60]}..."):
-                    st.markdown(f"**Function:** {mapping['function']}")
-                    st.markdown(f"**Outcome:** {mapping['outcome']}")
-                    st.markdown("**Suggested Actions:**")
-                    for action in mapping.get("suggested_actions", []):
-                        st.markdown(f"- {action}")
-                    st.caption(f"Citation: {mapping['citation']}")
-
-        with subtab3:
-            st.subheader("Cross-Framework Compliance Checklist")
-            checklist_data = []
-            for item in report.get("cross_framework_checklist", []):
-                checklist_data.append({
-                    "EU AI Act Requirement": item["eu_requirement"],
-                    "NIST RMF Mapping": item["nist_mapping"],
-                    "Implementation Action": item["implementation_action"]
-                })
-            st.table(checklist_data)
-
-        with subtab4:
-            st.subheader("Export Report")
-
-            # Generate Markdown
-            markdown_report = generate_markdown_report(
-                system_name, classification, report
-            )
-
-            st.download_button(
-                label="📥 Download as Markdown",
-                data=markdown_report,
-                file_name=f"{system_name.replace(' ', '_')}_compliance_report.md",
-                mime="text/markdown"
-            )
-
-            # Preview
-            with st.expander("Preview Markdown"):
-                st.code(markdown_report, language="markdown")
-
-
-def generate_markdown_report(system_name: str, classification, report: dict) -> str:
-    """Generate markdown export of the compliance report."""
-
-    md = f"""# AI Compliance Report: {system_name}
-
-**Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
+**[v2]** Golden-set retrieval eval (`tests/golden_set.json`, 12–15 systems with expert-expected articles/subcategories; `notebooks/04_golden_eval.py`): hit-rate@k per track + citation coverage, runs logged to managed MLflow, baseline + at least one tuning iteration. Closes the honest gap in the current story: grounding guarantees citations are *real*, not that they're the *most relevant* — this measures relevance.
 
 ---
 
-## Risk Classification
+## Regulatory currency **[As-built — verified]**
 
-| Attribute | Value |
-|-----------|-------|
-| **Risk Tier** | {classification.risk_tier.value.replace("_", " ").title()} |
-| **Basis** | {classification.primary_basis} |
-| **Role** | {classification.applicable_role.value.title()} |
-| **Deadline** | {classification.compliance_deadline} |
-
-**Reasoning:** {classification.reasoning}
+Deadlines in code are verified against **Regulation (EU) 2024/1689, Article 113** (current published law): prohibitions from **2 February 2025**; GPAI provisions from **2 August 2025**; general application — including high-risk Annex III and Article 50 transparency — from **2 August 2026**. *(v1.0 listed the limited-risk deadline as 2025-08-02; that conflated the GPAI date and was corrected.)* Live caveat, surfaced deliberately: a **Digital Omnibus** amendment under EU negotiation could shift some high-risk dates if adopted — the tool cites provisions and flags dates for counsel verification rather than asserting them as immutable. Standing rule: no date ships in a demo without re-verification at the source.
 
 ---
 
-## EU AI Act Obligations
+## Cost model **[As-built + v2]**
 
-"""
-
-    for ob in report.get("eu_ai_act_obligations", []):
-        md += f"""### {ob['article']}: {ob['requirement']}
-
-{ob['summary']}
-
-- **Role:** {ob['role'].title()}
-- **Deadline:** {ob['deadline']}
-- **Citation:** {ob['citation']}
-
-"""
-
-    md += """---
-
-## NIST AI RMF Mapping
-
-"""
-
-    for mapping in report.get("nist_rmf_mapping", []):
-        md += f"""### {mapping['subcategory']}
-
-**Function:** {mapping['function']}
-
-**Outcome:** {mapping['outcome']}
-
-**Suggested Actions:**
-"""
-        for action in mapping.get("suggested_actions", []):
-            md += f"- {action}\n"
-        md += f"\n*Citation: {mapping['citation']}*\n\n"
-
-    md += """---
-
-## Cross-Framework Checklist
-
-| EU AI Act Requirement | NIST RMF Mapping | Implementation Action |
-|-----------------------|------------------|----------------------|
-"""
-
-    for item in report.get("cross_framework_checklist", []):
-        md += f"| {item['eu_requirement']} | {item['nist_mapping']} | {item['implementation_action']} |\n"
-
-    md += """
----
-
-*Disclaimer: This report is for informational purposes only and does not constitute legal advice.*
-"""
-
-    return md
-```
+| Phase | Actual / budget | Notes |
+|---|---|---|
+| v1 build | **$0 actual** (v1.0 estimated $12–30) | Free Edition covered everything; the vector endpoint consumes fair-usage quota, not dollars |
+| v2 build | **≤ $5 hard cap** | The live-lite provider key, capped in the provider console; no subscriptions of any kind in v2 |
+| Paid-Databricks gate | decision, not default | Entry criteria pre-committed: traction gates met, budget alerts on, service principal replacing PATs, and eyes open on the landmine — **AI Search endpoints bill a continuous base price from the moment an index exists** (stopping only 24 h after the last index is deleted). Verify current rates in the pricing calculator before creating anything. |
 
 ---
 
-## Deployment Options
+## Timeline
 
-### Option 1: Streamlit Cloud (Recommended for MVP)
-
-**Pros:** Free, fast deployment, shareable URL
-**Cons:** Not Databricks-native, requires API connectivity
-
-```bash
-# requirements.txt
-streamlit>=1.28.0
-databricks-sdk>=0.12.0
-mlflow>=2.9.0
-pandas>=2.0.0
-```
-
-```yaml
-# .streamlit/secrets.toml (for Streamlit Cloud)
-[databricks]
-host = "https://your-workspace.cloud.databricks.com"
-token = "your-databricks-token"
-```
-
-### Option 2: Databricks Apps (Enterprise Story)
-
-**Pros:** Native Databricks integration, Unity Catalog governance, enterprise-ready
-**Cons:** Requires Databricks workspace, slightly more setup
-
-```python
-# Deploy as Databricks App
-from databricks.sdk import WorkspaceClient
-
-w = WorkspaceClient()
-
-# Create app deployment
-w.apps.create(
-    name="ai-compliance-navigator",
-    description="RAG-powered EU AI Act & NIST AI RMF compliance mapping",
-    # ... additional config
-)
-```
+v1 shipped across six phase gates (data foundation → index + classifier → synthesis → frontend → scenario suite → deploy + document), each passed on evidence; the session-by-session record lives in `docs/worklog.md`. The v2 plan — seven phases (0–6), ~21 hours, with Definitions of Done and a final acceptance gate — is specified in `docs/v2_build_plan.md` and is the authoritative schedule going forward. All v2 work happens on branch `v2`; `main` is frozen as the deployed release.
 
 ---
 
-## Cost Estimate (MVP)
-
-| Component | Estimated Cost | Notes |
-|-----------|---------------|-------|
-| Databricks Vector Search | ~$5–10 | Small index, triggered sync |
-| Foundation Model APIs (embedding) | ~$2–5 | BGE is very cost-effective |
-| Foundation Model APIs (LLM) | ~$5–15 | Depends on testing volume |
-| Streamlit Cloud | Free | Community tier |
-| **Total** | **$12–30** | For entire MVP development |
-
----
-
-## 6-Week Implementation Timeline (Databricks-Specific)
-
-### Week 1: Data Foundation (4 hours)
-- [ ] Set up Unity Catalog: `ai_governance.compliance_navigator`
-- [ ] Download regulatory PDFs (EU AI Act, NIST AI RMF, Playbook)
-- [ ] Create Delta tables: `raw_documents`, `regulatory_chunks`
-- [ ] Implement chunking logic (EU AI Act by article, NIST by subcategory)
-- [ ] Load initial corpus
-### Week 2: Vector Search + Classification (4 hours)
-- [ ] Create Vector Search endpoint
-- [ ] Create Delta Sync index with BGE embeddings
-- [ ] Implement rule-based classification engine
-- [ ] Test classification with 4 example systems
-- [ ] Verify retrieval quality
-### Week 3: LLM Synthesis Pipeline (4 hours)
-- [ ] Configure Foundation Model endpoint (Claude or DBRX)
-- [ ] Implement synthesis function with structured output
-- [ ] Build cross-framework mapping logic
-- [ ] Test end-to-end pipeline
-- [ ] Log experiments in MLflow
-### Week 4: Streamlit Frontend (3 hours)
-- [ ] Build intake form with all fields
-- [ ] Build tabbed report display
-- [ ] Connect to Databricks backend
-- [ ] Add basic styling
-### Week 5: Testing + Polish (3 hours)
-- [ ] Test with 8–10 diverse AI systems
-- [ ] Handle edge cases (GPAI, multi-category systems)
-- [ ] Implement Markdown export
-- [ ] Add disclaimer and citations UI
-### Week 6: Deploy + Document (3 hours)
-- [ ] Deploy to Streamlit Cloud
-- [ ] Create architecture diagram for README
-- [ ] Record 5-minute demo video
-- [ ] Draft LinkedIn post
-- [ ] Push to GitHub
----
-
-## Interview Demo Script (5 minutes)
-
-1. **(30 sec) Problem Statement**
-   > "In AI governance consulting, regulatory mapping is the most time-consuming task. Clients need to understand which EU AI Act provisions apply to their specific AI systems and how to implement controls. This tool accelerates that process."
-2. **(60 sec) Live Demo: Insurance Claims Triage**
-   - Fill out intake form for an automated insurance claims triage model
-   - Highlight: domain = insurance, decision_impact = fully_automated, data_types = financial
-3. **(90 sec) Show Output**
-   - Risk Classification: High-Risk (Annex III, Category 5b)
-   - Applicable Articles: Art. 9, 10, 11, 13, 14
-   - NIST Mapping: GOVERN 1.1, MAP 1.1, MEASURE 2.2, MANAGE 1.1
-   - Cross-Framework Checklist with specific actions
-4. **(60 sec) Architecture Highlight**
-   > "The classification is deterministic and auditable — it's rule-based, not LLM-generated. The LLM only handles retrieval and synthesis, not the compliance determination. This is critical for governance tooling."
-5. **(30 sec) Databricks Value Prop**
-   > "Built entirely on Databricks: Delta Lake for versioned regulatory corpus, Vector Search for retrieval, Foundation Model APIs for synthesis, Unity Catalog for governance. The architecture scales to production."
----
-
-## Files and Repository Structure
+## Repository structure (v2 target)
 
 ```
 ai-compliance-navigator/
 ├── README.md
-├── architecture.md                 # This document
+├── architecture.md                  # this document (v2.0)
 ├── requirements.txt
-├── .streamlit/
-│   └── config.toml
+├── .streamlit/config.toml           # secrets.toml is local-only, gitignored
+├── docs/
+│   ├── worklog.md                   # session-by-session build record
+│   ├── v2_build_plan.md             # phased plan with DoD gates
+│   └── erasure_runbook.md           # [v2] DELETE + VACUUM procedure
 ├── notebooks/
-│   ├── 01_document_ingestion.py    # Databricks notebook
+│   ├── 01_document_ingestion.py
 │   ├── 02_create_vector_index.py
-│   └── 03_test_pipeline.py
+│   ├── 03_test_pipeline.py          # end-to-end gates incl. starved-retrieval
+│   └── 04_golden_eval.py            # [v2] retrieval eval → MLflow
+├── scripts/
+│   └── embed_corpus_local.py        # [v2] one-off: bge-small corpus embeddings
 ├── src/
-│   ├── __init__.py
-│   ├── classification_engine.py    # Rule-based classifier
-│   ├── retrieval.py                # Vector Search retrieval
-│   ├── llm_synthesis.py            # LLM synthesis with citations
-│   └── utils.py
-├── app.py                          # Streamlit frontend
+│   ├── classification_engine.py     # deterministic classifier (+ GPAI overlay [v2])
+│   ├── retrieval.py                 # two-track filtered AI Search retrieval
+│   ├── retrieval_local.py           # [v2] in-process retrieval, same interface
+│   ├── llm_synthesis.py             # grounded synthesis, defensive JSON parser
+│   ├── audit_log.py                 # [v2] assessment_log writer
+│   └── utils.py                     # canonical config: endpoints, versions, flags
+├── app.py                           # Streamlit: form → report → export (+ auth, history [v2])
 ├── data/
-│   └── framework_mappings.json     # Pre-computed EU-NIST mappings
+│   ├── framework_mappings.json
+│   ├── sample_report.json           # real captured output backing demo mode
+│   ├── corpus_embeddings.npz        # [v2] live-lite retrieval artifact
+│   └── corpus_chunks_meta.json      # [v2]
 └── tests/
-    ├── test_classification.py
-    └── test_scenarios.json         # 5 test scenarios
+    ├── test_classification.py       # 4 unit + S1–S10 scenario runner
+    ├── test_scenarios.json
+    └── golden_set.json              # [v2]
 ```
 
 ---
 
-## Key Design Decisions Summary
+## Key design decisions (updated)
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Risk Classification | Rule-based, not LLM | Auditability and determinism required for compliance tooling |
-| Vector Store | Databricks Vector Search | Native integration, no external dependencies |
-| Embeddings | Databricks BGE | Cost-effective, good quality for regulatory text |
-| LLM | Claude Sonnet via External Model | Best structured output quality; DBRX as fallback |
-| Chunking | Domain-specific (by article/subcategory) | Preserves regulatory structure, improves retrieval |
-| Frontend | Streamlit | Fastest path to demo-ready UI |
-| Deployment | Streamlit Cloud (MVP) → Databricks Apps (v2) | Balance speed vs. enterprise story |
+| Decision | v1.0 plan | As-built / v2 | Rationale |
+|---|---|---|---|
+| Risk classification | Rule-based | Rule-based + `all_matches` audit field + GPAI overlay [v2] | Auditability and determinism; the overlay models GPAI as the parallel regime it legally is |
+| Vector store | Databricks Vector Search, two indexes | AI Search (renamed), **one** Delta Sync index + source/tier filtering | One endpoint fits the quota; filtering replaces index-per-framework at lower cost |
+| Embeddings | Databricks BGE | `bge-large-en` managed (1024-dim); `bge-small` local for the public tier [v2] | Cost; same-model consistency preserved within each tier |
+| LLM | Claude via external endpoint | **Llama 3.3 70B**, Databricks-hosted; capped provider key on public tier [v2] | Claude gated on Free Edition; swap preserved as one config line; defensive parser closes the open-model JSON gap |
+| Chunking | By article/subcategory | Same, **hardened**: validated headings, monotonic article numbers, annex chunking, longest-span NIST dedupe | Real PDF extraction defeats naive patterns; Annex III retrievability is a hard requirement |
+| Persistence | Deferred | `assessment_log` with rule trail + classifier version + corpus Delta version [v2] | The audit tool keeps an audit trail of its own judgments — reproducible via time travel |
+| Frontend | Streamlit | Streamlit + demo/live/live-lite topologies | The classifier always runs live; the public URL can never hard-break |
+| Deployment | Streamlit Cloud → Databricks Apps | Streamlit Community Cloud shipped; Databricks Apps deferred behind an explicit paid gate with pre-committed entry criteria | Spend follows traction, not hope; endpoint base-price landmine documented |
 
 ---
 
-*Document Version: 1.0*
+## Change log
 
+**v2.0 (this document)**
+- Reframed as as-built v1 record + v2 target architecture
+- LLM: Claude → Databricks-hosted Llama 3.3 70B (Free Edition gating), defensive JSON parsing, capped-key public path [v2]
+- Product rename Vector Search → AI Search; single-index + filtering replaces two-index design; CDF requirement on source table documented
+- Extraction: pypdf → PyMuPDF (kerning); chunkers hardened (validated headings, monotonic ordering, annexes, NIST longest-span dedupe)
+- Regulatory dates verified vs Art. 113 (limited-risk 2025 date in v1.0 corrected to 2 Aug 2026); Digital Omnibus flux documented
+- Deployment topologies formalized: local live / public live with graceful fallback / demo mode / live-lite [v2]
+- New v2 components specified: `assessment_log` (+ privacy-by-design exclusions and erasure runbook), `st.login` auth, history + re-run diff, golden-set eval in MLflow, GPAI overlay, canonical identifiers and branch strategy
+- Cost model updated to actuals ($0 v1) and the paid-Databricks decision gate with the endpoint base-price warning
 
+**v1.0 (March 2026)** — original MVP design. Preserved in git history.
+
+---
+
+*Document Version: 2.0*
+*Supersedes: v1.0*
