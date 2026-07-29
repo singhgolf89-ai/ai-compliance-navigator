@@ -73,3 +73,26 @@ def get_vector_search_client():
     if host and token:
         return VectorSearchClient(workspace_url=host, personal_access_token=token)
     return VectorSearchClient()   # in-notebook: implicit auth
+
+# ── Audit spine (v2) ─────────────────────────────────────────────────────
+CLASSIFIER_VERSION = "1.0.0"   # bump on ANY rule change — stamped on every logged assessment
+APP_VERSION = "2.0.0-dev"      # v2 branch
+
+
+def get_sql_connection():
+    """SQL-warehouse connection for the audit log (local live mode).
+    Reads st.secrets in-app; falls back to secrets.toml for scripts.
+    Run scripts from the repo root so the fallback path resolves."""
+    from databricks import sql as dbsql
+    try:
+        import streamlit as st
+        s = st.secrets["databricks"]
+    except Exception:
+        import tomllib
+        with open(".streamlit/secrets.toml", "rb") as f:
+            s = tomllib.load(f)["databricks"]
+    return dbsql.connect(
+        server_hostname=s["host"].replace("https://", ""),
+        http_path=s["sql_http_path"],
+        access_token=s["token"],
+    )

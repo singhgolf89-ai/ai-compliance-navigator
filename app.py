@@ -81,6 +81,8 @@ with st.sidebar:
         "Found this useful, have questions, or want a walkthrough? "
         "[Reach out on LinkedIn](https://www.linkedin.com/in/YOUR-LINKEDIN)"
     )
+    if not DEMO_MODE:
+        st.caption("Assessments are logged for audit and reproducibility.")
 
 st.title("⚖️ AI Compliance Navigator")
 st.markdown("*Regulatory mapping for the EU AI Act and NIST AI RMF*")
@@ -143,6 +145,13 @@ with tab_intake:
                         "Run locally with Databricks credentials for live analysis.")
                 st.success("Sample report ready — see the Compliance Report tab.")
             else:
+                import time as _time
+                from src.audit_log import log_assessment
+                if "sid" not in st.session_state:
+                    import uuid as _uuid
+                    st.session_state.sid = str(_uuid.uuid4())[:8]
+                t0 = _time.perf_counter()
+                retrieved, report, status = None, None, "fallback"
                 try:
                     with st.spinner("Retrieving regulatory provisions and synthesizing report..."):
                         from src.retrieval import retrieve_compliance_requirements
@@ -155,17 +164,24 @@ with tab_intake:
                             classification={"risk_tier": clf.risk_tier.value,
                                 "primary_basis": clf.primary_basis, "reasoning": clf.reasoning},
                             retrieved=retrieved)
+                    status = "parse_error" if "_parse_error" in report else "ok"
                     st.session_state.update(clf=clf, report=report,
                                             system_name=system_name, demo=False)
                     st.success("Analysis complete — see the Compliance Report tab.")
                 except Exception as e:
-                    # Backend unreachable -> fall back to the sample rather than erroring
                     sample = _load_sample_report()
                     st.session_state.update(clf=clf, report=sample["report"],
                                             system_name=system_name, demo=True)
+                    report = {"_error": str(e)[:500]}
                     st.warning("Live backend unavailable — showing a pre-generated sample "
                                "report. (Run locally with Databricks credentials for live analysis.)")
                     st.caption(f"Backend detail: {str(e)[:200]}")
+
+                latency_ms = (_time.perf_counter() - t0) * 1000
+                aid = log_assessment(intake, clf, retrieved, report, status,
+                                     latency_ms, session_id=st.session_state.sid)
+                if aid:
+                    st.caption(f"Assessment logged: {aid}")
 
 # ── Report ───────────────────────────────────────────────────────────────
 with tab_report:
