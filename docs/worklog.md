@@ -348,3 +348,22 @@ reproduced by RMF and Playbook parses — cross-validates both.
   run instructions, v2 roadmap
 - Repo public (after history clean), secrets excluded
 - Rehearse 5-min demo; LinkedIn case-study draft
+
+---
+
+## Session 7 — v2 Phase 0: Launch & Traction Instrumentation
+
+### Traction gates (written BEFORE data, per plan — paid Databricks is go
+### only if one of these trips within the 4-week window from launch)
+- G1: ≥50 unique app viewers/week, sustained 4 consecutive weeks, OR
+- G2: ≥3 inbound requests for live analysis / walkthrough (via CTA), OR
+- G3: 1 design-partner conversation (someone wants to use it on a real system)
+
+### Baselines at launch (fill after Step 6)
+- Streamlit Analytics viewers: ___
+- GitHub Insights: unique visitors ___ / clones ___
+- Launch date: ___
+
+### Live-mode verification (Step 1 result): ___
+### Token expiry reminder: streamlit-cloud PAT expires ~mid-Oct 2026 —
+### calendar reminder set for Oct 8 (app silently degrades to sample after expiry)
