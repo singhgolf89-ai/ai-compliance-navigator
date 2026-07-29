@@ -87,7 +87,7 @@ def classify_risk_tier(intake: SystemIntake) -> ClassificationResult:
     if (intake.domain == "law_enforcement"
             and "biometric" in intake.data_types
             and "real-time" in t):
-        prohibited.append(("Art. 5(1)(d)", "Real-time remote biometric ID for law enforcement"))
+        prohibited.append(("Art. 5(1)(h)", "Real-time remote biometric ID for law enforcement"))
 
     if (any(kw in t for kw in ["emotion recognition", "emotion detection", "emotional state"])
             and intake.domain in ["HR", "education", "workplace"]):

@@ -41,7 +41,7 @@
       "description": "Real-time facial recognition for biometric identification of individuals in public spaces by police",
       "intended_purpose": "Identify suspects in real-time surveillance feeds"
     },
-    "expected_tier": "prohibited", "expected_basis": "Art. 5(1)(d)"
+    "expected_tier": "prohibited", "expected_basis": "Art. 5(1)(h)"
   },
   {
     "id": "S5", "name": "Workplace emotion recognition (ordering test)",

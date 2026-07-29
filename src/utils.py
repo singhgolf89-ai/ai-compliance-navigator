@@ -75,7 +75,7 @@ def get_vector_search_client():
     return VectorSearchClient()   # in-notebook: implicit auth
 
 # ── Audit spine (v2) ─────────────────────────────────────────────────────
-CLASSIFIER_VERSION = "1.0.0"   # bump on ANY rule change — stamped on every logged assessment
+CLASSIFIER_VERSION = "1.0.1"   # 1.0.1: RBI basis corrected 5(1)(d) -> 5(1)(h) per enacted Reg. 2024/1689
 APP_VERSION = "2.0.0-dev"      # v2 branch
 
 
