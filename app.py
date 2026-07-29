@@ -75,6 +75,12 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Built on Databricks**")
     st.caption("BGE embeddings · Llama 3.3 70B synthesis · deterministic classifier")
+    st.markdown("---")
+    st.markdown("**Feedback**")
+    st.markdown(
+        "Found this useful, have questions, or want a walkthrough? "
+        "[Reach out on LinkedIn](https://www.linkedin.com/in/YOUR-LINKEDIN)"
+    )
 
 st.title("⚖️ AI Compliance Navigator")
 st.markdown("*Regulatory mapping for the EU AI Act and NIST AI RMF*")
