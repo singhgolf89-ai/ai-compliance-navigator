@@ -367,3 +367,70 @@ reproduced by RMF and Playbook parses — cross-validates both.
 ### Live-mode verification (Step 1 result): ___
 ### Token expiry reminder: streamlit-cloud PAT expires ~mid-Oct 2026 —
 ### calendar reminder set for Oct 8 (app silently degrades to sample after expiry)
+
+### Live-mode verification (Step 1 result): DECISION — kept DEMO_MODE=true.
+### Reason: protect free-tier daily quota from public traffic. Live demos run
+### locally; public live path = Phase 1 live-lite (≤$5) if CTA interest lands.
+
+---
+
+## Session 8 — v2 Phase 2: Audit Spine — PASSED
+
+### Completed
+- ENV2-06 gate-keeper: databricks-sql-connector round-trip from laptop —
+  CONNECTED, chunk count 455. One 3-scope token (local-dev-full:
+  sql + model-serving + vector-search; sql scope lives under "BI Tools"
+  in the token dialog).
+- assessment_log created via idempotent ensure_table() (CDF on, PK,
+  all_matches ARRAY, classifier_version, chunk IDs, corpus_table_version,
+  synthesis_status, latency_ms).
+- src/audit_log.py writer: never raises (product > logging); failures
+  logged too. app.py hooks: live-mode logging with ok | parse_error |
+  fallback status; conditional privacy notice (hidden in demo mode).
+- Verified with row evidence:
+  - S1 live: high_risk / ok / all_matches=1 / corpus_table_version=5
+    (id 2a72ab28-...)
+  - Synthetic: minimal_risk / empty trail by design (id f05eae45-...)
+  - S4 FaceWatch: prohibited — logged under BOTH classifier versions
+    (see finding 1)
+  - S8 SpamGuard: minimal / ok (id b2aaa2be-...)
+- P2C-03 failure injection: bogus endpoints → yellow fallback banner +
+  row with synthesis_status='fallback'; restore verified via empty git diff.
+- P2C-05 demo suppression: DEMO_MODE=true run wrote nothing; counts
+  unchanged; privacy caption correctly hidden.
+- P2V-04 time-travel reproducibility: from the S1 log row alone
+  (version 5, chunk eu_ai_act:article_6:0), VERSION AS OF reproduced the
+  exact Article 6 text the assessment retrieved. Script committed as
+  scripts/reproduce_assessment.py.
+- Decision D1: st.login DEFERRED — public app is demo mode, nobody to
+  attribute; user_id="local-dev"; auth ships with the live-public trigger.
+- Final counts at close: ok=5, fallback=1.
+
+### Findings — both caught by the tool itself (interview gold)
+1. **The corpus caught the classifier.** FaceWatch report's retrieved text
+   cited Art. 5(1)(h) for real-time RBI vs the classifier's 5(1)(d)
+   (draft-era numbering from the v1 spec). Corrected the rule,
+   CLASSIFIER_VERSION 1.0.0 → 1.0.1, S4 expectation updated, full suite
+   green. The log now holds FaceWatch under BOTH versions — ruleset
+   separation demonstrated in anger.
+2. **The log caught the synthesis.** S8 (minimal-risk) report surfaced
+   Article 9 (a high-risk obligation). eu_chunk_ids showed NO article_9
+   chunk retrieved — tier filter exonerated; the LLM promoted a
+   cross-reference inside Article 80's text into an obligation entry.
+   Parked as golden-set case G-min-01 (Phase 4) with candidate prompt fix:
+   "cite only articles whose own provisions appear in the retrieved chunks."
+
+### Release
+- Spine merged to main (b0ff354); docs merge follows this entry.
+- Public smoke (REL2-03/04): PASSED — demo banner ✓, no logging caption ✓,
+  no privacy caption ✓, counts unchanged (ok=5, fallback=1) ✓.
+
+### Open items (Phase 0 leftovers, carried)
+- Record analytics baselines (Streamlit viewers, GitHub traffic) in Session 7
+- Publish the LinkedIn case-study post
+
+### Next: v2 Phase 3 — Assessment History + Re-run Diff (~3h)
+- "Past Assessments" tab from the log; reopen stored reports; re-run
+  against current corpus/rules with tier + obligations diff.
+  Demo seed ready: FaceWatch rows under 1.0.0 vs 1.0.1.
+
