@@ -434,3 +434,37 @@ reproduced by RMF and Playbook parses — cross-validates both.
   against current corpus/rules with tier + obligations diff.
   Demo seed ready: FaceWatch rows under 1.0.0 vs 1.0.1.
 
+---
+
+## Session 9 — v2 Phase 3: Assessment History + Re-run Diff — PASSED
+
+### Completed
+- Read path in src/audit_log.py: list_assessments (light, no payloads),
+  get_assessment (full row incl. intake+report), current_corpus_version,
+  diff_assessments (pure function; deterministic tier/basis/version signals
+  separated from synthesis-variability obligation deltas).
+- _render_stored in app.py: renders a stored row (strings/JSON, not live
+  objects); graceful "no report stored" branch for fallback rows.
+- "📜 Past Assessments" tab, live-mode only (hidden in demo): load → table →
+  select → reopen → re-run-and-diff. Re-runs are themselves logged.
+- Verified: V1 list, V2 reopen (Claims Triage high-risk + SpamGuard),
+  V3 fallback row graceful, V4 CHANGED diff and unchanged diff both correct.
+
+### Headline evidence (screenshots saved)
+- FaceWatch stored under classifier 1.0.0 (basis 5(1)(d)) re-run under 1.0.1
+  → diff shows **Basis CHANGED: Art. 5(1)(d) → Art. 5(1)(h)**, tier held
+  prohibited. A real EU AI Act citation correction rendered as before/after —
+  the tool diffing its own history against corrected rules.
+- Design proof: stored row preserves the OLD determination (audit trail, not
+  cache); diff separates deterministic change (bold) from synthesis
+  variability (flagged indicative).
+
+### Demo-safety + release
+- DEMO_MODE=true → two tabs only, no history tab exposed. Verified.
+- Merged to main; public smoke: two tabs, demo banner, S1 renders.
+
+### Next: v2 Phase 4 — Golden-Set Eval + Retrieval Metrics (~4h)
+- tests/golden_set.json (12-15 systems, expert-expected EU arts + NIST subcats)
+- notebooks/04_golden_eval.py: hit-rate@k per track + citation coverage → MLflow
+- Includes G-min-01 (S8 Article 9 over-synthesis) + candidate prompt fix
+- Upgrades Q4 interview answer from "I don't measure relevance" to real numbers
