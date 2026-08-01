@@ -154,3 +154,88 @@ def log_assessment(intake, clf, retrieved, report,
     except Exception as e:
         print(f"[audit_log] write failed (app unaffected): {e}")
         return None
+
+# ── Read path + diff (v2 Phase 3: assessment history) ────────────────────
+
+def list_assessments(user_id="local-dev", limit=50):
+    """Light listing for the history tab — no report payloads."""
+    conn = get_sql_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            SELECT assessment_id, created_at, system_name, domain, risk_tier,
+                   primary_basis, classifier_version, corpus_table_version,
+                   synthesis_status
+            FROM {TABLE}
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+            LIMIT {int(limit)}
+        """, {"user_id": user_id})
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_assessment(assessment_id):
+    """Full row (intake + report JSON) for reopening a stored assessment."""
+    conn = get_sql_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT * FROM {TABLE} WHERE assessment_id = :aid",
+                    {"aid": assessment_id})
+        row = cur.fetchone()
+        if row is None:
+            return None
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
+    finally:
+        cur.close()
+        conn.close()
+
+
+def current_corpus_version():
+    conn = get_sql_connection()
+    cur = conn.cursor()
+    try:
+        return _corpus_version(cur)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _articles(report):
+    return {str(ob.get("article", "")).strip()
+            for ob in (report or {}).get("eu_ai_act_obligations", [])
+            if ob.get("article")}
+
+
+def _subcats(report):
+    return {str(m.get("subcategory", "")).strip()
+            for m in (report or {}).get("nist_rmf_mapping", [])
+            if m.get("subcategory")}
+
+
+def diff_assessments(old_row, old_report, new_clf, new_report,
+                     new_classifier_version, new_corpus_version):
+    """Stored vs fresh. Tier/basis/versions are deterministic signals;
+    obligation-level deltas can also reflect synthesis variability."""
+    old_arts, new_arts = _articles(old_report), _articles(new_report)
+    old_sub, new_sub = _subcats(old_report), _subcats(new_report)
+    return {
+        "tier_old": old_row["risk_tier"],
+        "tier_new": new_clf.risk_tier.value,
+        "tier_changed": old_row["risk_tier"] != new_clf.risk_tier.value,
+        "basis_old": old_row["primary_basis"],
+        "basis_new": new_clf.primary_basis,
+        "basis_changed": old_row["primary_basis"] != new_clf.primary_basis,
+        "classifier_old": old_row["classifier_version"],
+        "classifier_new": new_classifier_version,
+        "corpus_old": old_row["corpus_table_version"],
+        "corpus_new": new_corpus_version,
+        "eu_added": sorted(new_arts - old_arts),
+        "eu_removed": sorted(old_arts - new_arts),
+        "nist_added": sorted(new_sub - old_sub),
+        "nist_removed": sorted(old_sub - new_sub),
+    }

@@ -68,6 +68,42 @@ def _to_markdown(name, clf, report):
     md.append("\n---\n*Informational only; not legal advice.*")
     return "\n".join(md)
 
+def _render_stored(row):
+    """Render a stored assessment from its log row (strings, not objects)."""
+    st.subheader(f"{row['system_name']}  ·  {str(row['created_at'])[:19]} UTC")
+    badge = {"prohibited": "🔴", "high_risk": "🟠",
+             "limited_risk": "🟡", "minimal_risk": "🟢"}
+    st.markdown(f"{badge.get(row['risk_tier'], '⚪')} "
+                f"**{row['risk_tier'].replace('_', ' ').title()}** — {row['primary_basis']}")
+    st.caption(f"Classifier {row['classifier_version']} · corpus v{row['corpus_table_version']} · "
+               f"synthesis {row['synthesis_status']} · id {row['assessment_id']}")
+
+    am = row.get("all_matches")
+    am = list(am) if am is not None else []   # connector may return a numpy array
+    if am:
+        st.markdown("**Rule trail:** " + " ; ".join(str(x) for x in am))
+
+    rep = {}
+    try:
+        rep = json.loads(row["report"]) if row.get("report") else {}
+    except Exception:
+        pass
+    if row["synthesis_status"] != "ok" or not rep.get("eu_ai_act_obligations"):
+        st.info(f"No synthesized report stored (synthesis status: {row['synthesis_status']}).")
+        return
+    with st.expander("EU AI Act obligations", expanded=True):
+        for ob in rep.get("eu_ai_act_obligations", []):
+            st.markdown(f"- **{ob.get('article', '')}** — {ob.get('requirement', '')}  \n"
+                        f"  {ob.get('summary', '')}  \n  *{ob.get('citation', '')}*")
+    with st.expander("NIST AI RMF mapping"):
+        for m in rep.get("nist_rmf_mapping", []):
+            st.markdown(f"- **{m.get('subcategory', '')}** — {m.get('outcome', '')}")
+    with st.expander("Cross-framework checklist"):
+        rows_ = rep.get("cross_framework_checklist", [])
+        if rows_:
+            st.table([{"EU": r.get("eu_requirement", ""),
+                       "NIST": r.get("nist_mapping", ""),
+                       "Action": r.get("implementation_action", "")} for r in rows_])
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -88,7 +124,11 @@ st.title("⚖️ AI Compliance Navigator")
 st.markdown("*Regulatory mapping for the EU AI Act and NIST AI RMF*")
 st.markdown("---")
 
-tab_intake, tab_report = st.tabs(["📝 System Intake", "📊 Compliance Report"])
+if DEMO_MODE:
+    tab_intake, tab_report = st.tabs(["📝 System Intake", "📊 Compliance Report"])
+else:
+    tab_intake, tab_report, tab_history = st.tabs(
+        ["📝 System Intake", "📊 Compliance Report", "📜 Past Assessments"])
 
 # ── Intake form ──────────────────────────────────────────────────────────
 with tab_intake:
@@ -242,3 +282,116 @@ with tab_report:
                 mime="text/markdown")
             with st.expander("Preview"):
                 st.code(md, language="markdown")
+
+# ── Past Assessments (v2 Phase 3) — live mode only ───────────────────────
+if not DEMO_MODE:
+    with tab_history:
+        st.header("Past Assessments")
+        st.caption("Every live assessment is logged with its rule trail, classifier "
+                   "version, and corpus version — reproducible via Delta time travel.")
+        from src.audit_log import (list_assessments, get_assessment,
+                                   diff_assessments, current_corpus_version,
+                                   log_assessment as _log2)
+        from src.utils import CLASSIFIER_VERSION
+
+        if st.button("🔄 Load / refresh history"):
+            try:
+                st.session_state.history_rows = list_assessments()
+                st.session_state.pop("opened", None)
+                st.session_state.pop("diff", None)
+            except Exception as e:
+                st.error("Could not reach the assessment log.")
+                st.caption(f"Detail: {str(e)[:200]}")
+
+        rows = st.session_state.get("history_rows")
+        if rows is None:
+            st.info("Click Load / refresh to fetch your assessment history.")
+        elif not rows:
+            st.info("No assessments logged yet — run one from the System Intake tab.")
+        else:
+            st.dataframe(
+                [{"when": str(r["created_at"])[:19], "system": r["system_name"],
+                  "tier": r["risk_tier"], "basis": r["primary_basis"],
+                  "classifier": r["classifier_version"], "status": r["synthesis_status"]}
+                 for r in rows],
+                use_container_width=True, hide_index=True)
+
+            labels = {f"{r['system_name']} · {r['risk_tier']} · clf {r['classifier_version']} · "
+                      f"{str(r['created_at'])[:19]} · {r['assessment_id'][:8]}": r["assessment_id"]
+                      for r in rows}
+            sel = st.selectbox("Open an assessment", list(labels.keys()))
+            aid = labels[sel]
+            if st.button("📂 Open stored report"):
+                st.session_state.opened = get_assessment(aid)
+                st.session_state.pop("diff", None)
+
+            opened = st.session_state.get("opened")
+            if opened and opened["assessment_id"] == aid:
+                _render_stored(opened)
+                st.markdown("---")
+                st.subheader("Re-run against current rules & corpus")
+                st.caption(f"Stored under classifier {opened['classifier_version']}, "
+                           f"corpus v{opened['corpus_table_version']}. "
+                           f"Current classifier: {CLASSIFIER_VERSION}.")
+                if st.button("⚖️ Re-run and diff"):
+                    import time as _time
+                    intake_d = json.loads(opened["intake"])
+                    intake2 = SystemIntake(**intake_d)
+                    clf2 = classify_risk_tier(intake2)
+                    t0 = _time.perf_counter()
+                    status2, retrieved2, report2 = "fallback", None, None
+                    try:
+                        with st.spinner("Re-running retrieval + synthesis..."):
+                            from src.retrieval import retrieve_compliance_requirements
+                            from src.llm_synthesis import synthesize_compliance_report
+                            retrieved2 = retrieve_compliance_requirements(
+                                system_description=f"{intake2.description}. Purpose: {intake2.intended_purpose}",
+                                risk_tier=clf2.risk_tier.value)
+                            report2 = synthesize_compliance_report(
+                                system_description=f"{intake2.system_name}: {intake2.description}",
+                                classification={"risk_tier": clf2.risk_tier.value,
+                                    "primary_basis": clf2.primary_basis,
+                                    "reasoning": clf2.reasoning},
+                                retrieved=retrieved2)
+                        status2 = "parse_error" if "_parse_error" in report2 else "ok"
+                    except Exception as e:
+                        report2 = {"_error": str(e)[:500]}
+                        st.warning("Backend unavailable — re-run could not complete.")
+                    lat2 = (_time.perf_counter() - t0) * 1000
+                    aid2 = _log2(intake2, clf2, retrieved2, report2, status2, lat2,
+                                 session_id=st.session_state.get("sid"))
+                    if aid2:
+                        st.caption(f"Re-run logged: {aid2}")
+                    old_report = {}
+                    try:
+                        old_report = json.loads(opened["report"]) if opened.get("report") else {}
+                    except Exception:
+                        pass
+                    st.session_state.diff = diff_assessments(
+                        opened, old_report, clf2, report2 or {},
+                        CLASSIFIER_VERSION, current_corpus_version())
+
+                d = st.session_state.get("diff")
+                if d:
+                    st.markdown("#### What changed")
+                    st.markdown(("🟢 **Tier:** unchanged — " + d["tier_new"])
+                                if not d["tier_changed"]
+                                else f"🔴 **Tier CHANGED:** {d['tier_old']} → {d['tier_new']}")
+                    st.markdown(("🟢 **Basis:** unchanged — " + d["basis_new"])
+                                if not d["basis_changed"]
+                                else f"🟠 **Basis CHANGED:** {d['basis_old']} → {d['basis_new']}")
+                    st.markdown(f"**Classifier:** {d['classifier_old']} → {d['classifier_new']} "
+                                f"&nbsp;|&nbsp; **Corpus:** v{d['corpus_old']} → v{d['corpus_new']}")
+                    c3, c4 = st.columns(2)
+                    with c3:
+                        st.markdown("**EU obligations added**")
+                        st.write(d["eu_added"] or "—")
+                        st.markdown("**EU obligations removed**")
+                        st.write(d["eu_removed"] or "—")
+                    with c4:
+                        st.markdown("**NIST subcategories added**")
+                        st.write(d["nist_added"] or "—")
+                        st.markdown("**NIST subcategories removed**")
+                        st.write(d["nist_removed"] or "—")
+                    st.caption("Tier, basis, and versions are deterministic. Obligation-level "
+                               "deltas can also reflect synthesis variability — treat as indicative.")
