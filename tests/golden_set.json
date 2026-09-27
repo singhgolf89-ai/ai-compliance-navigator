@@ -1,0 +1,199 @@
+[
+  {
+    "id": "G-01", "name": "Insurance claims triage",
+    "intake": {
+      "system_name": "Claims Triage Model", "domain": "insurance",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Automated triage of insurance claims, scoring claims for eligibility and fraud risk assessment",
+      "intended_purpose": "Accelerate insurance claims processing decisions"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "article_14"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MANAGE 1.1"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Annex III(5)(b) per S1 (suite-verified). Derivation: Art. 6 is the high-risk classification rule; the high-risk regime is Ch. III Sec. 2, of which risk management (9) and human oversight (14) are the core obligations for a fully-automated decision system."
+  },
+  {
+    "id": "G-02", "name": "HR resume screening",
+    "intake": {
+      "system_name": "TalentFilter", "domain": "HR",
+      "ai_type": "classification", "decision_impact": "human_in_loop",
+      "data_types": ["personal"], "deployment_geography": ["EU"],
+      "description": "Screening of job candidate resumes to rank applicants for recruitment shortlisting",
+      "intended_purpose": "Speed up hiring by ranking candidates"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "article_10"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MEASURE 2.11"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Annex III(4)(a) per S2 (suite-verified). Derivation: recruitment is the canonical bias-sensitive use case, so data & data governance (10) joins the classification rule (6) and risk management (9); NIST MEASURE 2.11 covers fairness evaluation."
+  },
+  {
+    "id": "G-03", "name": "Real-time biometric ID for law enforcement",
+    "intake": {
+      "system_name": "FaceWatch", "domain": "law_enforcement",
+      "ai_type": "computer_vision", "decision_impact": "advisory",
+      "data_types": ["biometric"], "deployment_geography": ["EU"],
+      "description": "Real-time facial recognition for biometric identification of individuals in public spaces by police",
+      "intended_purpose": "Identify suspects in real-time surveillance feeds"
+    },
+    "expected_tier": "prohibited",
+    "expected_eu_sections": ["article_5"],
+    "expected_nist_subcats": ["GOVERN 1.2", "MAP 3.5"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Art. 5(1)(h) per S4 post-1.0.1 (suite-verified; Finding 1). Derivation: for a prohibited system, Article 5 sections (prohibition, exceptions, conditions) are the only must-retrieve; demanding Art. 6 would punish retrieval for being correct about a banned system."
+  },
+  {
+    "id": "G-04", "name": "Internal spam filter (G-min-01)",
+    "intake": {
+      "system_name": "SpamGuard", "domain": "general",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "description": "Classifies internal emails as spam or not spam for inbox filtering",
+      "intended_purpose": "Reduce spam in employee inboxes"
+    },
+    "expected_tier": "minimal_risk",
+    "expected_eu_sections": ["article_80"],
+    "expected_nist_subcats": ["GOVERN 1.1"],
+    "must_not_include_in_report": ["Article 9", "Article 10", "Article 14"],
+    "source_note": "Classifier: minimal per S8 (suite-verified). THE G-min-01 case (Phase 2 Finding 2): a minimal-risk report must not surface high-risk regime obligations; Art. 80 (procedure for non-high-risk under Annex III) is the structurally on-point provision."
+  },
+  {
+    "id": "G-05", "name": "Customer-service chatbot",
+    "intake": {
+      "system_name": "HelpBot", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "interacts_with_humans": true,
+      "description": "Customer service chatbot answering product questions in natural conversation",
+      "intended_purpose": "Reduce support ticket volume"
+    },
+    "expected_tier": "limited_risk",
+    "expected_eu_sections": ["article_50"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MAP 1.1"],
+    "must_not_include_in_report": ["Article 9"],
+    "source_note": "Classifier: Art. 50(1) per S6 (suite-verified). Derivation: limited-risk = the Art. 50 transparency regime only; the high-risk regime is inapplicable, so Art. 9 must not appear in the report."
+  },
+  {
+    "id": "G-06", "name": "Insurance risk + biometric categorization (multi-match)",
+    "intake": {
+      "system_name": "RiskProfiler", "domain": "insurance",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial", "biometric"], "deployment_geography": ["EU"],
+      "description": "Insurance risk assessment that also performs biometric categorization of applicants for premium pricing and underwriting",
+      "intended_purpose": "Personalize insurance premiums using multiple data signals"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "annex_iii"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MEASURE 2.11"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Annex III(1)(b) first-match per S9 (suite-verified). Derivation: the multi-category case is exactly where the Annex III text itself must be retrievable (annex_iii chunks), alongside the classification rule (6) and risk management (9)."
+  },
+  {
+    "id": "G-07", "name": "Bank credit scoring",
+    "intake": {
+      "system_name": "CreditScore AI", "domain": "banking",
+      "ai_type": "prediction", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Credit scoring model assessing creditworthiness for loan approval decisions",
+      "intended_purpose": "Automate lending decisions"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "article_10"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MEASURE 2.11"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Annex III(5)(b) creditworthiness per S3 (suite-verified). Derivation: same bias-sensitive shape as hiring — data governance (10) is central; 6 and 9 as for all high-risk."
+  },
+  {
+    "id": "G-08", "name": "Marketing image generator",
+    "intake": {
+      "system_name": "AdGen", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "generates_synthetic_content": true,
+      "description": "Generates synthetic marketing images and produces text content for advertising campaigns",
+      "intended_purpose": "Automate creative asset production"
+    },
+    "expected_tier": "limited_risk",
+    "expected_eu_sections": ["article_50"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MAP 1.1"],
+    "must_not_include_in_report": ["Article 9"],
+    "source_note": "Classifier: Art. 50(2) synthetic-content marking per S7 (suite-verified). Same limited-risk derivation as G-05: Art. 50 regime only."
+  },
+  {
+    "id": "G-09", "name": "Workplace emotion recognition",
+    "intake": {
+      "system_name": "MoodTrack", "domain": "HR",
+      "ai_type": "classification", "decision_impact": "advisory",
+      "data_types": ["personal"], "deployment_geography": ["EU"],
+      "description": "Emotion recognition system monitoring employee emotional state during work hours",
+      "intended_purpose": "Workplace productivity and wellbeing monitoring"
+    },
+    "expected_tier": "prohibited",
+    "expected_eu_sections": ["article_5"],
+    "expected_nist_subcats": ["GOVERN 1.2", "MAP 3.5"],
+    "must_not_include_in_report": [],
+    "source_note": "Classifier: Art. 5(1)(f) per S5, the ordering case (suite-verified — prohibited evaluated before Annex III(4)). Prohibited derivation as G-03: Article 5 sections only."
+  },
+  {
+    "id": "G-10", "name": "Inventory demand forecasting",
+    "intake": {
+      "system_name": "StockCast", "domain": "general",
+      "ai_type": "prediction", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "description": "Forecasts warehouse inventory demand from historical sales data",
+      "intended_purpose": "Supply chain planning"
+    },
+    "expected_tier": "minimal_risk",
+    "expected_eu_sections": ["article_80"],
+    "expected_nist_subcats": ["GOVERN 1.1"],
+    "must_not_include_in_report": ["Article 9", "Article 14"],
+    "source_note": "Classifier: minimal per v1 unit test test_minimal_risk_inventory_forecast (verified). Second minimal-risk case so G-04 isn't alone; same Art. 80 derivation and high-risk-exclusion rule."
+  },
+  {
+    "id": "G-11", "name": "GPAI foundation-model service (documented edge)",
+    "intake": {
+      "system_name": "FoundationAPI", "domain": "general",
+      "ai_type": "generative", "decision_impact": "advisory",
+      "data_types": ["none"], "deployment_geography": ["EU"],
+      "description": "A general-purpose foundation model API offering text generation to downstream developers",
+      "intended_purpose": "Provide a general-purpose language model as a service"
+    },
+    "expected_tier": "limited_risk",
+    "expected_eu_sections": ["article_50"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MAP 1.1"],
+    "must_not_include_in_report": ["Article 9"],
+    "source_note": "Classifier: limited/Art. 50(2) per S10 — DOCUMENTED edge behavior, not full GPAI handling (Art. 51-56 overlay is Phase 5). Expectations deliberately reflect current behavior; when the overlay ships, this entry gains Art. 51-56 expectations and the change is itself evidence."
+  },
+  {
+    "id": "G-12", "name": "Online exam proctoring",
+    "intake": {
+      "system_name": "ProctorAI", "domain": "education",
+      "ai_type": "computer_vision", "decision_impact": "human_in_loop",
+      "data_types": ["personal", "biometric"], "deployment_geography": ["EU"],
+      "description": "Monitors students via webcam during online exams to flag suspected cheating behaviors for instructor review",
+      "intended_purpose": "Maintain exam integrity in remote education"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "article_14"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MAP 3.5"],
+    "must_not_include_in_report": [],
+    "source_note": "NEW entry (no suite precedent — verify tier pre-freeze). Derivation: monitoring students during tests is Annex III(3) education territory; description deliberately behavior-focused (not emotion) to avoid the 5(1)(f) prohibition. Human oversight (14) central given instructor-review design."
+  },
+  {
+    "id": "G-13", "name": "Public benefits eligibility scoring",
+    "intake": {
+      "system_name": "BenefitCheck", "domain": "government",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Evaluates eligibility of citizens for public assistance benefits and social services",
+      "intended_purpose": "Automate benefits eligibility determinations"
+    },
+    "expected_tier": "high_risk",
+    "expected_eu_sections": ["article_6", "article_9", "article_10"],
+    "expected_nist_subcats": ["GOVERN 1.1", "MEASURE 2.11"],
+    "must_not_include_in_report": [],
+    "source_note": "Tier verified pre-freeze — verification CAUGHT a classifier coverage gap: no Annex III(5)(a) rule existed; added under CLASSIFIER_VERSION 1.1.0 with scenario S11. Derivation: essential public services eligibility is Annex III(5)(a); fully-automated determinations over vulnerable populations make data governance (10) and risk management (9) core alongside the classification rule (6)."
+  }
+]
