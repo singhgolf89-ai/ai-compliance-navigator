@@ -75,7 +75,9 @@ def get_vector_search_client():
     return VectorSearchClient()   # in-notebook: implicit auth
 
 # ── Audit spine (v2) ─────────────────────────────────────────────────────
-CLASSIFIER_VERSION = "1.0.1"   # 1.0.1: RBI basis corrected 5(1)(d) -> 5(1)(h) per enacted Reg. 2024/1689
+CLASSIFIER_VERSION = "1.1.0"   # 1.1.0: adds Annex III(5)(a) public-benefits rule — coverage gap caught
+                               # during golden-set construction (Finding 3). History: 1.0.1 corrected
+                               # RBI basis 5(1)(d) -> 5(1)(h) per enacted Reg. 2024/1689.
 APP_VERSION = "2.0.0-dev"      # v2 branch
 
 

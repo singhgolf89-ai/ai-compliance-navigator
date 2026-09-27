@@ -129,6 +129,11 @@ def classify_risk_tier(intake: SystemIntake) -> ClassificationResult:
                                   "task allocation", "monitor", "evaluat", "promotion", "termination"]):
             high_risk.append(("Annex III(4)(a)", "Recruitment and selection / worker management"))
 
+    if intake.domain in ["government", "public_sector"]:
+        if any(kw in t for kw in ["benefit", "public assistance", "social services",
+                                  "welfare", "essential service", "eligibility"]):
+            high_risk.append(("Annex III(5)(a)", "Access to essential public services and benefits"))
+
     if intake.domain in ["insurance", "banking", "financial"]:
         if any(kw in t for kw in ["creditworth", "credit scor", "insurance pric", "risk assessment",
                                   "premium", "underwriting", "claims", "eligibility"]):

@@ -110,5 +110,16 @@
       "intended_purpose": "Provide a general-purpose language model as a service"
     },
     "expected_tier": "documented", "expected_basis": "documented"
+  },
+  {
+    "id": "S11", "name": "Public benefits eligibility scoring",
+    "intake": {
+      "system_name": "BenefitCheck", "domain": "government",
+      "ai_type": "classification", "decision_impact": "fully_automated",
+      "data_types": ["personal", "financial"], "deployment_geography": ["EU"],
+      "description": "Evaluates eligibility of citizens for public assistance benefits and social services",
+      "intended_purpose": "Automate benefits eligibility determinations"
+    },
+    "expected_tier": "high_risk", "expected_basis": "Annex III(5)(a)"
   }
 ]
