@@ -468,3 +468,78 @@ reproduced by RMF and Playbook parses — cross-validates both.
 - notebooks/04_golden_eval.py: hit-rate@k per track + citation coverage → MLflow
 - Includes G-min-01 (S8 Article 9 over-synthesis) + candidate prompt fix
 - Upgrades Q4 interview answer from "I don't measure relevance" to real numbers
+
+
+---
+
+## Session 10 — v2 Phase 4 (part 1): Recovery #2, Golden Set FROZEN, Harness Built
+
+### Environment recovery (second reclamation)
+- AI Search endpoint reclaimed AGAIN after only ~2 weeks idle (first was ~6
+  weeks) — reclamation window tighter than assumed. Delta layer untouched
+  both times; deployed demo app unaffected throughout.
+- Rebuild exposed a SECOND orphan shape: get_index() is ENDPOINT-scoPED, so
+  a fresh empty endpoint made the probe report "absent" while UC still held
+  the name -> BadRequest on create. State enumeration = whack-a-mole.
+- Final design committed to nb02: **creation-as-probe** — attempt create; on
+  name collision, delete the UC entity and retry until the name frees
+  (deletion is async — returns on acceptance). Healthy fast-path requires
+  BOTH authorities to agree (describe + endpoint index list) so a live
+  index is never torn down. Notebook is now self-healing: next reclamation
+  = Run All, nothing else.
+- 3-phase sync cell restored (wait provisioning -> sync -> poll to READY);
+  wait_until_ready signature drift avoided via manual describe() polling.
+- Verified: state=ONLINE_NO_PENDING_UPDATE | indexed rows: 455; filter
+  integrity re-proven on the rebuilt index (Filter respected ✓).
+- Git lesson (cost ~30 min): pulled the workspace Git folder while it held
+  uncommitted edits to the same file -> conflict markers embedded in the
+  notebook source. Resolved by committing the canonical version from local
+  (abc5133) and discarding the workspace copy. Standing rule reinforced:
+  never pull onto a dirty tree; one direction per file per sync cycle.
+- Serverless env lesson: fresh notebooks lack databricks-vectorsearch —
+  pip install + restartPython now the opening cells of every notebook
+  that touches retrieval (baked into 04_golden_eval).
+
+### Finding 3 — the answer key caught the classifier
+- Pre-freeze tier verification of the golden set: G-13 (public benefits
+  eligibility, domain=government) classified minimal_risk — NO Annex
+  III(5)(a) rule existed in the engine. Third self-caught defect, third
+  distinct instrument (corpus -> log -> eval construction).
+- Fix: Annex III(5)(a) rule added (government/public_sector + benefits
+  keywords); CLASSIFIER_VERSION 1.0.1 -> 1.1.0; permanent scenario S11.
+- Suite green: 4/4 unit + S1-S9, S11 PASS; S10 documented edge. Tier check:
+  13/13 OK incl. G-13 -> Annex III(5)(a).
+
+### Golden set FROZEN (P4B-01..05 complete)
+- tests/golden_set.json: 13 entries — 2 prohibited / 6 high / 3 limited /
+  2 minimal / 1 multi-match. Expectations derivation-based from the Act's
+  structure, source note per entry; expert-review approach recorded as
+  derivation+verification (article-level fluency parked to interview prep).
+- G-min-01 encoded as G-04 (must_not_include: Art. 9/10/14 on minimal-risk).
+- G-11 encodes the GPAI documented edge deliberately (expectations = current
+  behavior; changes when the Phase 5 overlay ships — the change is evidence).
+- FREEZE commit ab3f361 — precedes any scoring; provable from git history.
+
+### Harness built (P4C-01..04 code complete; run pending)
+- notebooks/04_golden_eval.py committed (e6dd567): honest metric definitions
+  in code (hit-rate@observed-k per track, macro mean; citation coverage over
+  synthesis-ok entries; must_not_include matched by article NUMBER token);
+  app-parity query construction; MLflow params incl. freeze commit +
+  observed k; per-entry results logged as artifact.
+- ENV4-01..06 all ✔ (MLflow smoke logged to acn_golden_eval; retrieval smoke
+  via committed repo code: EU rows=10, sample chunk eu_ai_act:article_6:1).
+- Observed: EU track returns k=10 — logged as observed param, not assumed.
+
+### Commit chain (the honesty trail)
+b698880 classifier 1.1.0 -> ab3f361 FREEZE -> abc5133 nb02 self-healing ->
+e6dd567 harness. Scores will land only after all of it.
+
+### Next session — baseline + tuning + release (~1.5-2h)
+1. Databricks: Git folder Pull -> open 04_golden_eval -> Run All (~5-10 min)
+2. Record verbatim: RUN ID, eu_hit_rate, nist_hit_rate, citation_coverage,
+   must_not_violations, G-04 verdict, observed k (P4D-01..04)
+3. Read numbers together -> design ONE tuning change (P4E) -> second run ->
+   deltas recorded whichever way they move
+4. README results table (baseline AND tuned, incl. regressions) + worklog +
+   Q4 interview answer upgrade -> merge v2->main + public smoke (P4F)
+### Cadence note: finish Phase 4 within the week — reclamation window is ~2wk.
