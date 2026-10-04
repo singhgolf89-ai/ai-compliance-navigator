@@ -47,7 +47,10 @@ def retrieve_compliance_requirements(
         filters={"source": "eu_ai_act", "risk_tier": _tier_filter(risk_tier)},
         num_results=num_results,
     )
-
+        # v2 NIST-track framing: NIST chunks are abstract governance prose, so a
+    # raw system description mismatches their register. Wrap the description
+    # in governance vocabulary for this track only. (P4E; baseline 5025d91b.)
+    nist_query = f"AI governance, risk management, and trustworthy AI practices for: {system_description}"
     # Track 2 — NIST (RMF + Playbook), source-filtered (no tier concept)
     nist = index.similarity_search(
         query_text=query,
