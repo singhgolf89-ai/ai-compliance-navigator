@@ -35,7 +35,8 @@ from src.utils import (CLASSIFIER_VERSION, EMBEDDING_ENDPOINT, LLM_ENDPOINT,
 
 GOLDEN_PATH = f"{REPO}/tests/golden_set.json"
 FREEZE_COMMIT = "ab3f361"          # provable from git history: precedes this run
-QUERY_TEMPLATE_VERSION = "v1-app-parity"   # query built exactly as app.py builds it
+# QUERY_TEMPLATE_VERSION = "v1-app-parity"   # query built exactly as app.py builds it
+QUERY_TEMPLATE_VERSION = "v2-nist-governance-framing"   # P4E: NIST track reframed; EU unchanged
 
 with open(GOLDEN_PATH) as f:
     GOLDEN = json.load(f)
@@ -185,9 +186,9 @@ print("\nG-min-01 (G-04 SpamGuard) violation:",
 import mlflow
 
 mlflow.set_experiment(f"/Users/{user}/acn_golden_eval")
-with mlflow.start_run(run_name="baseline-v1") as run:
+with mlflow.start_run(run_name="tuned-nist-v2") as run:
     mlflow.log_params({
-        "run_kind": "baseline",
+        "run_kind": "tuned",
         "query_template_version": QUERY_TEMPLATE_VERSION,
         "golden_set_size": len(GOLDEN),
         "golden_set_freeze_commit": FREEZE_COMMIT,
@@ -208,3 +209,18 @@ with mlflow.start_run(run_name="baseline-v1") as run:
     })
     mlflow.log_dict({"aggregate": agg, "per_entry": results}, "per_entry_results.json")
     print("BASELINE RUN ID:", run.info.run_id)
+
+# COMMAND ----------
+
+# ── Fetch per-entry detail for any run ───────────────────────────────────
+import mlflow, json
+RUN_ID = "5fdecb73715042edaf3fbcbf90c5232f"   # paste a run ID here to inspect it
+if RUN_ID:
+    p = mlflow.artifacts.download_artifacts(run_id=RUN_ID, artifact_path="per_entry_results.json")
+    per = json.load(open(p))["per_entry"]
+    for r in per:
+        print(f"{r['id']} {r['tier']:13} eu={r['eu_hit_rate']} hits={r['eu_hits']} "
+              f"| nist={r['nist_hit_rate']} k={r['nist_k']} | viol={r['must_not_violations'] or '-'}")
+
+# COMMAND ----------
+
