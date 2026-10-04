@@ -543,3 +543,49 @@ e6dd567 harness. Scores will land only after all of it.
 4. README results table (baseline AND tuned, incl. regressions) + worklog +
    Q4 interview answer upgrade -> merge v2->main + public smoke (P4F)
 ### Cadence note: finish Phase 4 within the week — reclamation window is ~2wk.
+
+---
+
+## Session 11 — v2 Phase 4 (part 2): Baseline, Tuning, Revert — Phase 4 CLOSED
+
+### Baseline (run 5025d91b, 158s, 13 entries)
+- eu_hit_rate 0.6410 | nist_hit_rate 0.2308 | citation_coverage 1.0 |
+  13/13 schema-valid | 1 must-not violation (G-08, 'Article 9') | k_eu=10.
+- Per-tier: prohibited + minimal perfect (1.0); high-risk 0.33-1.0 with
+  misses concentrated in Arts. 9/14 vs the large all-tier pool; ALL THREE
+  limited-risk entries 0.0 — article_50 never in top-10. Logged as a
+  finding; targeted fix queued to Phase 5.
+- G-min-01: G-04 clean, but the same violation fired on G-08 — the
+  must_not machinery generalized beyond its seeded case.
+
+### Tuning iteration (P4E — one change, measured)
+- Change: NIST-track query framing v2 ("AI governance, risk management,
+  and trustworthy AI practices for: {description}"); EU track + golden
+  set untouched (golden_set.json diff empty).
+- Result (run 5fdecb73): nist 0.2308 -> 0.1923 (REGRESSION −0.038);
+  eu identical to the digit (determinism confirmed); citations held 1.0;
+  G-08 violation recurred, G-04 clean again -> violation is
+  entry-deterministic at temp 0.1, not stochastic — downstream of the
+  Article 50 retrieval gap.
+- Mechanism: prefix helped vocabulary-poor entries (G-02, G-09 0->0.5)
+  but diluted the signal carrying all three limited-risk entries
+  (0.5->0.0). Net negative.
+- DECISION: revert to measured-best (v1). Commit 8114ee0. Experiment
+  preserved in git history + MLflow. v3 (per-track refinement, Art. 50
+  boost) parked to Phase 5.
+
+### Issues table additions
+- Workspace-side git pushes failed all day ("Resolver error" in dialog,
+  GH007 in terminal). Root cause: committer email privacy block — the
+  workspace clone committed under the Databricks login email. Fix:
+  repo-local noreply identity in the workspace clone; terminal is now the
+  reliable in-workspace commit route.
+- Notepad stale-buffer incidents caused three skipped/clobbered edits;
+  verification gates (py_compile + Select-String) caught all three.
+  Standing rule: shell-based edits for surgical changes; one editor
+  window per file; never commit without the gate output.
+
+### Commit chain (phase 4 complete)
+b698880 classifier 1.1.0 -> ab3f361 FREEZE -> abc5133 nb02 self-healing ->
+e6dd567 harness -> 8c8411e tuned-run config (as-run) -> 8114ee0 revert.
+Run IDs: baseline 5025d91b | tuned 5fdecb73.

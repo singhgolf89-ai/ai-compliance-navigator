@@ -68,14 +68,57 @@ Two deliberate, interview-relevant choices:
 
 ## Test evidence
 
-A 10-scenario suite (`tests/test_scenarios.json`) exercises all four risk tiers and edge cases, including:
+An 11-scenario suite (`tests/test_scenarios.json`) exercises all four risk tiers and edge cases, including:
 - **Rule ordering:** emotion recognition in the workplace classifies as *Prohibited* (Art. 5(1)(f)), not High-Risk — prohibited practices are evaluated before high-risk.
 - **Multi-category match:** a biometric + insurance system resolves to its first matching Annex III category deterministically.
 - **Grounding / no invention:** fed empty retrieval, the synthesis layer returns "not addressed in retrieved sources" rather than fabricating citations (verified).
 
 ```bash
-python tests/test_classification.py   # 4 unit tests + 10-scenario suite
+python tests/test_classification.py   # 4 unit tests + 11-scenario suite
 ```
+
+## Retrieval evaluation (golden set)
+
+Retrieval quality is measured against a frozen 13-system golden set
+(`tests/golden_set.json`, freeze commit `ab3f361` — committed before any
+scoring, provable from git history). Each entry defines the EU AI Act
+sections and NIST AI RMF subcategories that must appear in top-k
+retrieval, derived from the Act's structure with a documented source note
+per entry. Metrics: hit-rate@observed-k per track (macro mean), citation
+coverage over schema-valid syntheses, and a must-not-include check that
+flags high-risk obligations surfacing on lower-tier reports. All runs
+logged to MLflow.
+
+| Metric | Baseline (v1 query) | Tuned (v2 NIST framing) | Δ |
+|---|---|---|---|
+| EU AI Act hit-rate @10 | **0.641** | 0.641 | 0.00 |
+| NIST RMF hit-rate @10 | **0.231** | 0.192 | **−0.038** |
+| Citation coverage | **1.00** | 1.00 | 0.00 |
+| Schema-valid syntheses | 13/13 | 13/13 | — |
+| Must-not-include violations | 1 | 1 | 0 |
+
+MLflow runs: baseline `5025d91b`, tuned `5fdecb73`.
+
+**The tuning experiment — reported because it regressed.** The NIST
+track's low baseline traced to a register mismatch: system descriptions
+vs. abstract governance prose. Hypothesis: prefix the NIST query with
+governance vocabulary. Measured result: a net regression (−0.038) — the
+uniform prefix diluted the specific signal carrying the limited-risk
+entries. The change was reverted; the experiment is preserved in git
+history and MLflow. The harness exists precisely to catch
+plausible-sounding changes that make things worse.
+
+**Findings the eval surfaced:**
+- Constructing the answer key caught a classifier coverage gap before any
+  scoring existed: no Annex III(5)(a) rule (public-benefits eligibility
+  fell through to minimal risk). Fixed as `CLASSIFIER_VERSION 1.1.0` with
+  permanent scenario S11.
+- All three limited-risk entries score 0.0 on the EU track: Article 50
+  never surfaces in top-10 for conversational system descriptions.
+  Queued for a targeted, tier-aware fix rather than a blunt global change.
+- The single must-not violation (Article 9 on a limited-risk report) is
+  entry-stable across both runs and downstream of that Article 50 gap.
+- Citation coverage is a measured 100% across all 13 systems, both runs.
 
 ## Regulatory currency
 
@@ -105,9 +148,8 @@ Backend setup (corpus ingestion, vector index, endpoints) lives in `notebooks/` 
 
 - Dedicated GPAI classification (Art. 51–56) — MVP surfaces GPAI transparency obligations but not the full GPAI regime
 - Broader Insurance/Financial-Services corpus (GDPR, GLBA, DORA, SR 11-7, NAIC, Colorado SB 21-169, NYDFS, ECOA/FCRA)
-- Assessment audit log: persist every intake + classification to a versioned Delta table (closes the audit loop)
 - ISO/IEC 42001 mapping; interactive follow-up questioning; PDF export
-- Retrieval ranking tuning (NIST subcategory relevance)
+- Tier-aware retrieval tuning (Article 50 gap on limited-risk; NIST per-track framing v3 — see eval findings)
 
 ---
 
