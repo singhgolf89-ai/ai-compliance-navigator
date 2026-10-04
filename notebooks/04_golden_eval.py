@@ -35,8 +35,8 @@ from src.utils import (CLASSIFIER_VERSION, EMBEDDING_ENDPOINT, LLM_ENDPOINT,
 
 GOLDEN_PATH = f"{REPO}/tests/golden_set.json"
 FREEZE_COMMIT = "ab3f361"          # provable from git history: precedes this run
-# QUERY_TEMPLATE_VERSION = "v1-app-parity"   # query built exactly as app.py builds it
-QUERY_TEMPLATE_VERSION = "v2-nist-governance-framing"   # P4E: NIST track reframed; EU unchanged
+QUERY_TEMPLATE_VERSION = "v1-app-parity"   # query built exactly as app.py builds it
+# QUERY_TEMPLATE_VERSION = "v2-nist-governance-framing"   # P4E: tried, regressed 0.2308->0.1923, reverted
 
 with open(GOLDEN_PATH) as f:
     GOLDEN = json.load(f)
@@ -186,9 +186,9 @@ print("\nG-min-01 (G-04 SpamGuard) violation:",
 import mlflow
 
 mlflow.set_experiment(f"/Users/{user}/acn_golden_eval")
-with mlflow.start_run(run_name="tuned-nist-v2") as run:
+with mlflow.start_run(run_name="baseline-v1") as run:
     mlflow.log_params({
-        "run_kind": "tuned",
+        "run_kind": "baseline",
         "query_template_version": QUERY_TEMPLATE_VERSION,
         "golden_set_size": len(GOLDEN),
         "golden_set_freeze_commit": FREEZE_COMMIT,
