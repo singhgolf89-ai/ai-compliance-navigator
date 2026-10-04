@@ -53,7 +53,7 @@ def retrieve_compliance_requirements(
     nist_query = f"AI governance, risk management, and trustworthy AI practices for: {system_description}"
     # Track 2 — NIST (RMF + Playbook), source-filtered (no tier concept)
     nist = index.similarity_search(
-        query_text=query,
+        query_text=nist_query,
         columns=["chunk_id", "document_section", "section_title", "chunk_text",
                  "framework_function", "subcategory_id", "source_url"],
         filters={"source": ["nist_ai_rmf", "nist_playbook"]},
