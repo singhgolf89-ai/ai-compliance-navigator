@@ -61,7 +61,8 @@ def retrieve_compliance_requirements(
     )
 
     return {
-	"query": query, 
+	"query": query,
+        "nist_query": nist_query, 
         "eu_ai_act": eu["result"]["data_array"],
         "eu_columns": [c["name"] for c in eu["manifest"]["columns"]],
         "nist_rmf": nist["result"]["data_array"],
