@@ -115,7 +115,7 @@ with st.sidebar:
     st.markdown("**Feedback**")
     st.markdown(
         "Found this useful, have questions, or want a walkthrough? "
-        "[Reach out on LinkedIn](https://www.linkedin.com/in/YOUR-LINKEDIN)"
+        "[Reach out on LinkedIn](https://www.linkedin.com/in/aryaveersingh/)"
     )
     if not DEMO_MODE:
         st.caption("Assessments are logged for audit and reproducibility.")
