@@ -628,7 +628,6 @@ per-surface tokens must be re-minted when the code grows a dependency.
 - DECISION (LM-04): public posture = DEMO MODE for the launch window; live
   mode = deliberate secrets toggle for scheduled demos/interviews; any
   future standing public-live requires st.login + per-user scoping first.
-  Demo banner verified on the public URL: ______ (date).
 
 ### Findings logged
 - framework_mappings Delta table never materialized — crosswalk is
@@ -654,11 +653,6 @@ per-surface tokens must be re-minted when the code grows a dependency.
   stop/go decision; read it before typing git.
 
 ### L-01 — Launch baselines (recorded BEFORE the post)
-As of 2026-10-__ :
-- Streamlit Cloud app viewers (analytics): ______
-- GitHub Insights → Traffic, unique visitors (14d): ______
-- GitHub Insights → Traffic, clones (14d): ______
-- GitHub stars: ______
 
 ### Pre-registered traction gates (Phase 6 go/no-go criteria — committed
 before any post-launch data exists, same discipline as the golden-set
@@ -670,4 +664,3 @@ the launch post, AT LEAST ONE of:
 - >= 1 design-partner conversation (a practitioner agreeing to trial it
   on their AI inventory).
 Anything less = documented NO-GO (spend follows traction, not hope).
-Clock starts: the LinkedIn post publish date = ______.
