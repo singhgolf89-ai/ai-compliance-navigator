@@ -29,11 +29,14 @@ flowchart TD
     B -->|risk tier + basis| C[Filtered Vector Retrieval<br/>two-track: EU + NIST]
     C --> D[Grounded LLM Synthesis<br/>citation per requirement]
     D --> E[Tabbed Report + Markdown Export<br/>EU obligations / NIST mapping / checklist]
+    B -.logs.-> L
+    D -.logs.-> L
 
     subgraph DBX[Databricks Lakehouse]
         F[(Unity Catalog<br/>+ Delta Lake<br/>versioned corpus)]
         G[Vector Search Index<br/>455 chunks, BGE embeddings]
         H[Foundation Model API<br/>Llama 3.3 70B synthesis]
+        L[(assessment_log<br/>rule trail · classifier version<br/>corpus Delta version)]
     end
 
     F --> G
@@ -44,7 +47,19 @@ flowchart TD
     style DBX fill:#f8f9fa,stroke:#5f6368
 ```
 
-**Pipeline:** intake → deterministic classification → source-filtered vector retrieval (EU AI Act and NIST retrieved separately, EU filtered by risk tier) → grounded LLM synthesis with a citation for every requirement → tabbed report with Markdown export.
+**Pipeline:** intake → deterministic classification → source-filtered vector retrieval (EU AI Act and NIST retrieved separately, EU filtered by risk tier) → grounded LLM synthesis with a citation for every requirement → tabbed report with Markdown export — every live determination persisted to a governed audit log.
+
+## The audit spine (v2)
+
+**The tool that makes auditable determinations keeps an audit trail of its own determinations.** Every live assessment is persisted to a governed Delta table (`assessment_log`) carrying:
+
+- **The full rule trail and ruleset version.** `all_matches` records every rule that fired, not just the winner, alongside the `classifier_version` that produced the determination.
+- **The exact evidence, reproducibly.** Retrieved chunk IDs plus the corpus Delta version are stored — so `VERSION AS OF` the logged version returns the *exact regulatory text* that assessment saw. Any determination is reproducible from the log alone, via Delta time travel.
+- **Failures too.** Synthesis status and latency are logged on every row; an audit log that only records successes is not an audit log.
+
+A **Past Assessments** tab (live mode) lists the log, reopens any stored report, and re-runs it against the current rules and corpus with a diff — separating deterministic change from synthesis variability. The capstone capture: an assessment stored under classifier 1.0.0, re-run under 1.0.1, shows **"Basis CHANGED: Art. 5(1)(d) → 5(1)(h)"** — the regulation's enacted numbering changed, and the tool shows exactly what changed in the determination. The classifier-version column now reads 1.0.0 → 1.0.1 → 1.1.0 down the log, each bump tied to a defect the system's own instrumentation caught.
+
+Privacy by design: pseudonymous `user_id`, no raw identity in any row, no chunk text duplicated (IDs + corpus version reconstruct it); the right-to-erasure runbook documents `DELETE` **plus** `VACUUM` past the retention window — on Delta, `DELETE` alone is not erasure.
 
 ## Tech stack
 
@@ -56,6 +71,7 @@ flowchart TD
 | Retrieval | Databricks Vector Search (Delta Sync index) | Native integration; source + risk-tier filtering |
 | Classification | Rule-based engine (Python) | Auditability and determinism — non-negotiable for compliance tooling |
 | Synthesis | Databricks-hosted Llama 3.3 70B | Grounded, cited JSON output; all-Databricks, no external keys |
+| Audit trail | `assessment_log` Delta table + time travel | Every determination queryable, attributable, reproducible |
 | Frontend | Streamlit | Fastest path to a demoable UI |
 
 ## Honest engineering notes
@@ -64,7 +80,7 @@ Two deliberate, interview-relevant choices:
 
 **1. Open model instead of managed Claude.** The design targets a Databricks-hosted Claude endpoint for synthesis. My Databricks Free Edition tenant does not expose pay-per-token Claude (Anthropic FM APIs are tier/region-gated), so the MVP uses Databricks-hosted **Llama 3.3 70B** instead — reachable, capable, and fully internal to Databricks with no external API keys. On an entitled workspace this is a one-line swap (`LLM_ENDPOINT` in `src/utils.py`). Open-model JSON is slightly looser than Claude's, so synthesis includes a defensive JSON parser (fence-strip + brace-clip) and low temperature — verified to produce schema-valid output across consecutive runs.
 
-**2. Demo-mode fallback for the public deployment.** The deployed app authenticates to Databricks with a personal token. To keep the public URL free, always-on, and safe from quota drain, the deployed app runs in demo mode: the **deterministic classifier still runs live** on every input, while the LLM-synthesized report is served from a pre-generated real sample (`data/sample_report.json`) rather than a live backend call. Run locally with Databricks credentials for full live synthesis. This keeps the shareable link bulletproof while the code demonstrates the complete live integration.
+**2. Demo-mode fallback for the public deployment.** The deployed app authenticates to Databricks with a personal token. To keep the public URL free, always-on, and safe from quota drain, the deployed app runs in demo mode: the **deterministic classifier still runs live** on every input, while the LLM-synthesized report is served from a pre-generated real sample (`data/sample_report.json`) rather than a live backend call. Run locally with Databricks credentials for full live synthesis — including the audit log and Past Assessments history. This keeps the shareable link bulletproof while the code demonstrates the complete live integration.
 
 ## Test evidence
 
@@ -137,6 +153,7 @@ pip install -r requirements.txt
 #    [databricks]
 #    host = "https://your-workspace.cloud.databricks.com"
 #    token = "dapi..."
+#    sql_http_path = "/sql/1.0/warehouses/..."   # enables the audit log + Past Assessments
 
 # 3. Run
 streamlit run app.py
