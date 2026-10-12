@@ -589,3 +589,85 @@ e6dd567 harness. Scores will land only after all of it.
 b698880 classifier 1.1.0 -> ab3f361 FREEZE -> abc5133 nb02 self-healing ->
 e6dd567 harness -> 8c8411e tuned-run config (as-run) -> 8114ee0 revert.
 Run IDs: baseline 5025d91b | tuned 5fdecb73.
+
+
+---
+
+## Session 12 — Phase 4 Close, Cloud-Live Shakedown, Docs Release, Launch Baselines (2026-10-11/12)
+
+### Phase 4 formally PASSED (ACN-VCL-004 complete)
+- Smoke evidence: public app loads; S1 classifies high_risk / Annex III(5)(b)
+  on the production classifier; full cited report; Markdown export verified.
+- Cost line: AI Search endpoint the only standing resource (quota-only).
+
+### Cloud-live mode exercised for the first time — three config gaps found, fixed
+The public app was flipped to live mode, which ran the cloud-live topology
+for the first time ever. The error chain walked the stack, one graceful
+banner at a time (no stack trace ever reached the UI):
+1. Dependency: databricks-sql-connector missing from requirements.txt —
+   demo mode never touches SQL, so the gap was undetectable until now.
+   Fixed (commits 0703372, 77a2e25).
+2. Config: sql_http_path absent from Streamlit Cloud secrets. Added (both
+   scopes).
+3. Auth: cloud token (v1-era streamlit-cloud PAT) lacked sql scope —
+   "Provided access token does not have required scopes: sql." New
+   all-scope PAT minted: streamlit-cloud-full, 90d, expires ~2027-01-09.
+   Old narrow token revoked after round-trip proven.
+Lesson: a topology is config-complete only when exercised where it runs;
+per-surface tokens must be re-minted when the code grows a dependency.
+
+### First cloud-logged assessment + the exposure verdict
+- UnderwriteIQ (insurance underwriting) logged from the public cloud:
+  high_risk / Annex III(5)(b), classifier_version 1.1.0 — the ledger's
+  first 1.1.0 row; version lineage now 1.0.0 → 1.0.1 → 1.1.0, each tied
+  to a self-caught finding. user_id = local-dev (shared constant per D1).
+- Exposure: the cloud session listed ALL ten ledger rows — shared identity
+  means zero per-visitor isolation. Benign today (all rows are own test
+  scenarios); disqualifying as a standing public posture. This is exactly
+  the live-public trigger the Phase 2 D1 deferral named.
+- DECISION (LM-04): public posture = DEMO MODE for the launch window; live
+  mode = deliberate secrets toggle for scheduled demos/interviews; any
+  future standing public-live requires st.login + per-user scoping first.
+  Demo banner verified on the public URL: ______ (date).
+
+### Findings logged
+- framework_mappings Delta table never materialized — crosswalk is
+  data/framework_mappings.json, in-process; architecture doc corrected
+  (doc drift caught by a routine SHOW TABLES inventory).
+- Domain dropdown lacks a government/public-sector option — the Annex
+  III(5)(a) rule is unreachable from the UI (code/tests only). One-line
+  app.py fix queued to Phase 5 polish.
+- Past Assessments error detail prints internals (venv path, token-scope
+  text) to the public page — tighten to generic message, Phase 5 polish.
+
+### Docs release (merged 77a2e25..2976001 to main)
+- README: "The audit spine (v2)" section + assessment_log in the diagram
+  + Audit trail stack row + sql_http_path in local-run docs (2976001).
+- architecture.md: v2.0 → v2.1 — Phases 2–4 moved to as-built with the
+  measured eval numbers; st.login + live-lite marked Deferred with
+  triggers; corrected diagram (assessment_log inside the Lakehouse,
+  history read path, eval→MLflow); operational-resilience section
+  (reclamation, creation-as-probe); framework_mappings fixed (d78f959).
+- Process note: a failed Select-String gate was initially skipped past,
+  leaving the README staged on main — repaired (restore --staged, commit
+  on v2, clean merge). Standing rule sharpened: a gate's output is a
+  stop/go decision; read it before typing git.
+
+### L-01 — Launch baselines (recorded BEFORE the post)
+As of 2026-10-__ :
+- Streamlit Cloud app viewers (analytics): ______
+- GitHub Insights → Traffic, unique visitors (14d): ______
+- GitHub Insights → Traffic, clones (14d): ______
+- GitHub stars: ______
+
+### Pre-registered traction gates (Phase 6 go/no-go criteria — committed
+before any post-launch data exists, same discipline as the golden-set
+freeze)
+GO on paid Databricks is considered only if, over the 4-week window from
+the launch post, AT LEAST ONE of:
+- >= 50 unique app viewers/week sustained for 4 consecutive weeks, OR
+- >= 3 inbound requests for live analysis of a real system, OR
+- >= 1 design-partner conversation (a practitioner agreeing to trial it
+  on their AI inventory).
+Anything less = documented NO-GO (spend follows traction, not hope).
+Clock starts: the LinkedIn post publish date = ______.
