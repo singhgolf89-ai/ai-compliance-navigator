@@ -213,7 +213,7 @@ ai-compliance-navigator/
 ├── requirements.txt
 ├── .streamlit/config.toml           # secrets.toml local-only, gitignored
 ├── docs/
-│   ├── worklog.md                   # Sessions 1–11
+│   ├── worklog.md                   # maintained privately (owner build journal)
 │   ├── v2_build_plan.md
 │   └── erasure_runbook.md
 ├── notebooks/

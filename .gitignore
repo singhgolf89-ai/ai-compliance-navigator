@@ -17,3 +17,4 @@ mlruns/
 
 # Databricks may spawn .ipynb siblings of source-format notebooks — ignore them
 *.ipynb
+docs/worklog.md
